@@ -1,0 +1,3 @@
+[submodule "table_pypsa"]
+	path = table_pypsa
+	url = https://github.com/carnegie/table_pypsa.git

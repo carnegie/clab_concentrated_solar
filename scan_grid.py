@@ -1,0 +1,81 @@
+import pandas as pd
+import os
+from table_pypsa.run_pypsa import build_network, run_pypsa
+from table_pypsa.utilities.load_costs import load_costs
+import argparse
+import copy
+import xarray as xr
+from dask import delayed, compute
+
+# Get file name from command line argument
+parser = argparse.ArgumentParser()
+parser.add_argument('--file_name', '-f', help='Name of the base case file', required=True)
+
+
+def update_capacity_factors(n, comp_list, cfs_lat_lon):
+    """
+    Update capacity factors of the solar PV and concentrated solar for grid
+    """
+    # Run over all components that have solar or wind in their name
+    for tech_component in [comp['name'] for comp in comp_list if 'csp' in comp['name'] or 'solar' in comp['name'] or 'wind' in comp['name']]:
+
+        # Make pandas dataframe with time and capacity factors, and drop the rest
+        cfs_lat_lon = cfs_lat_lon.to_dataframe()
+        cfs_lat_lon = cfs_lat_lon[["capacity factor"]]
+        n.snapshots = cfs_lat_lon.index
+        
+        # Replace p_max_pu with the new capacity factors in network
+        n.generators_t['p_max_pu'][tech_component] = cfs_lat_lon
+
+        # Replace p_max_pu with the new capacity factors in component_list
+        for comp in comp_list:
+            if comp['name'] == tech_component:
+                comp['p_max_pu'] = cfs_lat_lon
+
+    return n, comp_list
+
+
+def main():
+    args = parser.parse_args()
+    base_case_file = args.file_name
+
+    network, case_dict, component_list, comp_attributes = build_network(base_case_file)
+
+    capacity_factors = xr.open_dataset('input_files/world_csp_CF_timeseries_2023_coarse.nc')
+
+    # Create an empty DataArray to store results without time dimension
+    result_array = xr.DataArray(
+        data=None,
+        dims=['x', 'y'],
+        coords={
+            'x': capacity_factors.x,
+            'y': capacity_factors.y},
+        name='objective')
+
+    @delayed
+    def process_grid_cell(lon, lat):
+
+        # Create deep copies of network and component_list
+        network_copy = copy.deepcopy(network)
+        component_list_copy = copy.deepcopy(component_list)
+
+        network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, capacity_factors.sel(x=lon, y=lat))
+
+        # Run PyPSA with new costs
+        run_pypsa(network_copy, base_case_file, case_dict, component_list_copy, outfile_suffix=f'_{lat.values}_{lon.values}')
+
+        # Extract relevant results and store them in the result_array
+        return lon, lat, network_copy.objective
+
+    tasks = [process_grid_cell(lon, lat) for lon in capacity_factors.x for lat in capacity_factors.y]
+    results = compute(*tasks)
+
+    for lon, lat, objective in results:
+        result_array.loc[dict(x=lon, y=lat)] = objective
+
+    # Save results to .nc file
+    result_array.to_netcdf('output_data/results.nc')
+
+
+if __name__ == "__main__":
+    main()
