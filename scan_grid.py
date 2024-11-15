@@ -12,12 +12,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--file_name', '-f', help='Name of the base case file', required=True)
 
 
-def update_capacity_factors(n, comp_list, cfs_lat_lon):
+def update_capacity_factors(n, comp_list, cf_type, cfs_lat_lon):
     """
     Update capacity factors of the solar PV and concentrated solar for grid
     """
     # Run over all components that have solar or wind in their name
-    for tech_component in [comp['name'] for comp in comp_list if 'csp' in comp['name'] or 'solar' in comp['name'] or 'wind' in comp['name']]:
+    for tech_component in [comp['name'] for comp in comp_list if cf_type in comp['name']]:
 
         # Make pandas dataframe with time and capacity factors, and drop the rest
         cfs_lat_lon = cfs_lat_lon.to_dataframe()
@@ -41,16 +41,17 @@ def main():
 
     network, case_dict, component_list, comp_attributes = build_network(base_case_file)
 
-    capacity_factors = xr.open_dataset('input_files/world_csp_CF_timeseries_2023_coarse.nc')
+    capacity_factors_csp = xr.open_dataset('input_files/world_csp_CF_timeseries_2023_coarse.nc')
+    capacity_factors_pv = xr.open_dataset('input_files/world_solar_CF_timeseries_2023_coarse.nc')
 
     # Create an empty DataArray to store results without time dimension
     result_array = xr.DataArray(
         data=None,
         dims=['x', 'y'],
         coords={
-            'x': capacity_factors.x,
-            'y': capacity_factors.y},
-        name='objective')
+            'x': capacity_factors_csp.x,
+            'y': capacity_factors_csp.y},
+        name='csp fraction')
 
     @delayed
     def process_grid_cell(lon, lat):
@@ -59,15 +60,19 @@ def main():
         network_copy = copy.deepcopy(network)
         component_list_copy = copy.deepcopy(component_list)
 
-        network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, capacity_factors.sel(x=lon, y=lat))
+        network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "csp", capacity_factors_csp.sel(x=lon, y=lat))
+        network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "solar", capacity_factors_pv.sel(x=lon, y=lat))
 
         # Run PyPSA with new costs
         run_pypsa(network_copy, base_case_file, case_dict, component_list_copy, outfile_suffix=f'_{lat.values}_{lon.values}')
 
-        # Extract relevant results and store them in the result_array
-        return lon, lat, network_copy.objective
+        # Extract fraction of supply from CSP
+        result = network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] / network_copy.statistics.supply().sum()
 
-    tasks = [process_grid_cell(lon, lat) for lon in capacity_factors.x for lat in capacity_factors.y]
+        # Extract relevant results and store them in the result_array
+        return lon, lat, result
+
+    tasks = [process_grid_cell(lon, lat) for lon in capacity_factors_csp.x for lat in capacity_factors_csp.y]
     results = compute(*tasks)
 
     for lon, lat, objective in results:

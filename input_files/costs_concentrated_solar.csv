@@ -1,0 +1,29 @@
+technology,parameter,value,unit,source,further description,currency_year
+csp glasspoint,FOM,1.13,%/year,"Glasspoint",Fixed O&M [2024-EUR/MW_th/y],2024.0
+csp glasspoint,investment,350.,EUR/kW_th,"Glasspoint",Nominal investment [2024-kEUR/MW_th],2024.0
+csp glasspoint,lifetime,25.0,years,"Glasspoint",Technical lifetime [years],2024.0
+csp glasspoint,discount rate,0.077,per unit,"Glasspoint", WACC,2024.0
+electric boiler steam,FOM,1.3375,%/year,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",310.1 Electric boiler steam  :  Fixed O&M,2019.0
+electric boiler steam,VOM,0.8711,EUR/MWh,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",310.1 Electric boiler steam  :  Variable O&M,2019.0
+electric boiler steam,efficiency,0.99,per unit,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx","310.1 Electric boiler steam  :  Total efficiency, net, annual average",2019.0
+electric boiler steam,investment,80.56,EUR/kW,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",310.1 Electric boiler steam  :  Nominal investment,2019.0
+electric boiler steam,lifetime,25.0,years,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",310.1 Electric boiler steam  :  Technical lifetime,2019.0
+gas boiler steam,FOM,3.6667,%/year,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",311.1c Steam boiler Gas:  Fixed O&M,2019.0
+gas boiler steam,VOM,24,EUR/MWh,"Ballpark number from Glasspoint gas prices",311.1c Steam boiler Gas:  Variable O&M,2019.0
+gas boiler steam,efficiency,0.92,per unit,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx","311.1c Steam boiler Gas:  Total efficiency, net, annual average",2019.0
+gas boiler steam,investment,54.9273,EUR/kW,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",311.1c Steam boiler Gas:  Nominal investment,2019.0
+gas boiler steam,lifetime,25.0,years,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",311.1c Steam boiler Gas:  Technical lifetime,2019.0
+Molten-Salt-charger glasspoint,FOM,1.075,%/year,"Glasspoint","This is still PyPSA High temperature Molten Salt storage",2024.0
+Molten-Salt-charger glasspoint,efficiency,0.99,per unit,"Glasspoint","This is still PyPSA High temperature Molten Salt storage",2024.0
+Molten-Salt-charger glasspoint,investment,187899.5061,EUR/MW,"Glasspoint","This is still PyPSA High temperature Molten Salt storage",2024.0
+Molten-Salt-charger glasspoint,lifetime,25.0,years,"Glasspoint",Technical lifetime [years],2024.0
+Molten-Salt-discharger glasspoint,FOM,0.2688,%/year,"Glasspoint","This is still PyPSA High temperature Molten Salt storage",2024.0
+Molten-Salt-discharger glasspoint,efficiency,0.4444,per unit,"Glasspoint","This is still PyPSA High temperature Molten Salt storage",2024.0
+Molten-Salt-discharger glasspoint,investment,751598.0242,EUR/MW,"Glasspoint","This is still PyPSA High temperature Molten Salt storage",2024.0
+Molten-Salt-discharger glasspoint,lifetime,25.0,years,"Glasspoint",Technical lifetime [years],2024.0
+Molten-Salt-store glasspoint,FOM,0.3308,%/year,"Glasspoint","This is still PyPSA High temperature Molten Salt storage",2024.0
+Molten-Salt-store glasspoint,investment,38000.,EUR/MWh,"Glasspoint","Ballpark number from Glasspoint costs",2024.0
+Molten-Salt-store glasspoint,lifetime,25.0,years,"Glasspoint",Technical lifetime [years],2024.0
+solar-utility single-axis tracking,FOM,1.8605,%/year,"Danish Energy Agency, technology_data_for_el_and_dh.xlsx",22 Utility-scale PV tracker:  Fixed O&M [2020-EUR/MW_e/y],2020.0
+solar-utility single-axis tracking,investment,650.3522,EUR/kW_e,"Danish Energy Agency, technology_data_for_el_and_dh.xlsx",22 Utility-scale PV tracker:  Nominal investment [2020-MEUR/MW_e],2020.0
+solar-utility single-axis tracking,lifetime,35.0,years,"Danish Energy Agency, technology_data_for_el_and_dh.xlsx",22 Utility-scale PV tracker:  Technical lifetime [years],2020.0
