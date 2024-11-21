@@ -37,9 +37,11 @@ def update_capacity_factors(n, comp_list, cf_type, cfs_lat_lon):
 
 def main():
     args = parser.parse_args()
-    base_case_file = args.file_name
+    file_name = args.file_name
 
-    network, case_dict, component_list, comp_attributes = build_network(base_case_file)
+    name_suffix = file_name.split('/')[-1].split('.')[0].replace('_case', '')
+
+    network, case_dict, component_list, comp_attributes = build_network(file_name)
 
     capacity_factors_csp = xr.open_dataset('input_files/world_csp_CF_timeseries_2023_coarse.nc')
     capacity_factors_pv = xr.open_dataset('input_files/world_solar_CF_timeseries_2023_coarse.nc')
@@ -64,7 +66,7 @@ def main():
         network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "solar", capacity_factors_pv.sel(x=lon, y=lat))
 
         # Run PyPSA with new costs
-        run_pypsa(network_copy, base_case_file, case_dict, component_list_copy, outfile_suffix=f'_{lat.values}_{lon.values}')
+        run_pypsa(network_copy, file_name, case_dict, component_list_copy, outfile_suffix=f'_{lat.values}_{lon.values}')
 
         # Extract fraction of supply from CSP
         result = network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] / network_copy.statistics.supply().sum()
@@ -79,7 +81,7 @@ def main():
         result_array.loc[dict(x=lon, y=lat)] = objective
 
     # Save results to .nc file
-    result_array.to_netcdf('output_data/results.nc')
+    result_array.to_netcdf(f'output_data/results_{name_suffix}.nc')
 
 
 if __name__ == "__main__":
