@@ -66,7 +66,7 @@ def main():
         network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "solar", capacity_factors_pv.sel(x=lon, y=lat))
 
         # Run PyPSA with new costs
-        run_pypsa(network_copy, file_name, case_dict, component_list_copy, outfile_suffix=f'_{lat.values}_{lon.values}')
+        run_pypsa(network_copy, file_name, case_dict, component_list_copy, outfile_suffix=f'_{lon.values}_{lat.values}')
 
         # Extract fraction of supply from CSP
         result = network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] / network_copy.statistics.supply().sum()
