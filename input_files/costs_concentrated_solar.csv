@@ -1,22 +1,22 @@
 technology,parameter,value,unit,source,further description,currency_year
-csp glasspoint,FOM,1.13,%/year,"Glasspoint",Fixed O&M [2024-EUR/MW_th/y],2024.0
-csp glasspoint,investment,380.,EUR/kW_th,"Glasspoint from 200 MW unit",Nominal investment [2024-kEUR/MW_th],2024.0
+csp glasspoint,FOM,1.13,%/year,"Glasspoint",Fixed O&M [2024-USD/MW_th/y],2024.0
+csp glasspoint,investment,380.,USD/kW_th,"Glasspoint from 200 MW unit",Nominal investment [2024-kUSD/MW_th],2024.0
 csp glasspoint,lifetime,25.0,years,"Glasspoint",Technical lifetime [years],2024.0
 csp glasspoint,discount rate,0.077,per unit,"Glasspoint", WACC,2024.0
 electric boiler steam,FOM,2.,%/year,"Glasspoint", Electric boiler steam  :  Fixed O&M,2024.0
-electric boiler steam,VOM,0.8711,EUR/MWh,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",310.1 Electric boiler steam  :  Variable O&M,2019.0
-electric boiler steam,efficiency,0.99,per unit,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx","310.1 Electric boiler steam  :  Total efficiency, net, annual average",2019.0
-electric boiler steam,investment,250,EUR/kW,"Glasspoint", Electric boiler steam  :  Nominal investment,2024.0
+electric boiler steam,VOM,3,USD/MWh_th,"Decarbonizing Low-Temperature Industrial Heat in the U.S.",310.1 Electric boiler steam  :  Variable O&M,2019.0
+electric boiler steam,efficiency,0.99,per unit,"Decarbonizing Low-Temperature Industrial Heat in the U.S.","310.1 Electric boiler steam  :  Total efficiency, net, annual average",2019.0
+electric boiler steam,investment,175,USD/kW,"Decarbonizing Low-Temperature Industrial Heat in the U.S.", Electric boiler steam  :  Nominal investment,2024.0
 electric boiler steam,lifetime,25.0,years,"Glasspoint", Electric boiler steam  :  Technical lifetime,2024.0
-gas,fuel,33,EUR/MWh_th,"Glasspoint natural gas for industry using 10$/MMBTU here",,2024.0
+gas,fuel,33,USD/MWh_th,"Glasspoint natural gas for industry using 10$/MMBTU here",,2024.0
 gas boiler steam,FOM,3.6667,%/year,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",311.1c Steam boiler Gas:  Fixed O&M,2019.0
-gas boiler steam,VOM,1.1077,EUR/MWh,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx",311.1c Steam boiler Gas:  Variable O&M,2019.0
-gas boiler steam,efficiency,0.92,per unit,"Danish Energy Agency, technology_data_for_industrial_process_heat.xlsx","311.1c Steam boiler Gas:  Total efficiency, net, annual average",2019.0
-gas boiler steam,investment,160,EUR/kW,"Glasspoint", Steam boiler Gas:  Nominal investment,2024.0
+gas boiler steam,VOM,6,USD/MWh,"Decarbonizing Low-Temperature Industrial Heat in the U.S.",311.1c Steam boiler Gas:  Variable O&M,2019.0
+gas boiler steam,efficiency,0.95,per unit,"Decarbonizing Low-Temperature Industrial Heat in the U.S.","311.1c Steam boiler Gas:  Total efficiency, net, annual average",2019.0
+gas boiler steam,investment,234,USD/kW,"Decarbonizing Low-Temperature Industrial Heat in the U.S.", Steam boiler Gas:  Nominal investment,2024.0
 gas boiler steam,lifetime,25.0,years,"Glasspoint", Steam boiler Gas:  Technical lifetime,2024.0
-Molten-Salt-store glasspoint,FOM,0.7,%/year,"Glasspoint","Ballpark number from Glasspoint costs",2024.0
-Molten-Salt-store glasspoint,investment,38000.,EUR/MWh,"Glasspoint","Ballpark number from Glasspoint costs",2024.0
-Molten-Salt-store glasspoint,lifetime,25.0,years,"Glasspoint",Technical lifetime [years],2024.0
-solar-utility single-axis tracking,FOM,1.8605,%/year,"Danish Energy Agency, technology_data_for_el_and_dh.xlsx",22 Utility-scale PV tracker:  Fixed O&M [2020-EUR/MW_e/y],2024.0
-solar-utility single-axis tracking,investment,700.,EUR/kW_e,"Varied parameter",22 Utility-scale PV tracker:  Nominal investment [2020-MEUR/MW_e],2020.0
+molten-salt-store glasspoint,FOM,0.7,%/year,"Glasspoint","Ballpark number from Glasspoint costs",2024.0
+molten-salt-store glasspoint,investment,38000.,USD/MWh,"Glasspoint","Ballpark number from Glasspoint costs",2024.0
+molten-salt-store glasspoint,lifetime,25.0,years,"Glasspoint",Technical lifetime [years],2024.0
+solar-utility single-axis tracking,FOM,1.8605,%/year,"Danish Energy Agency, technology_data_for_el_and_dh.xlsx",22 Utility-scale PV tracker:  Fixed O&M [2020-USD/MW_e/y],2024.0
+solar-utility single-axis tracking,investment,600.,USD/kW_e,"Varied parameter",22 Utility-scale PV tracker:  Nominal investment [2020-MUSD/MW_e],2020.0
 solar-utility single-axis tracking,lifetime,25.0,years,"Glasspoint", Utility-scale PV tracker:  Technical lifetime [years],2024.0

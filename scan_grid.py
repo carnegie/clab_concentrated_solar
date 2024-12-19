@@ -1,6 +1,7 @@
 import pandas as pd
 import os
-from table_pypsa.run_pypsa import build_network, run_pypsa
+import numpy as np
+from table_pypsa.run_pypsa import build_network, run_pypsa, write_result
 from table_pypsa.utilities.load_costs import load_costs
 import argparse
 import copy
@@ -68,7 +69,7 @@ def store_results(cap_fac, res, name_suf, cond):
         name=cond + '_breakeven_cost')
     # Fill xarray with results
     for lon, lat, objective in res:
-        result_array.loc[dict(x=lon, y=lat)] = objective[ic]
+        result_array.loc[dict(x=lon, y=lat)] = objective
 
     # Save results to .nc file
     if not os.path.exists('output_data'):
@@ -101,34 +102,46 @@ def main():
         network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "csp", capacity_factors_csp.sel(x=lon, y=lat))
         network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "solar", capacity_factors_pv.sel(x=lon, y=lat))
 
-        # Change the fuel cost of gas with a binary search to find breakeven cost
-        low_cost, high_cost = 10.,50.
-        while (high_cost - low_cost) > 2:
-            mid_cost = (low_cost + high_cost) / 2
+
+        # Binary search in log space to find the breakeven cost
+        low_cost, high_cost = 10., 1000000.
+        low_log, high_log = np.log(low_cost), np.log(high_cost)  # Convert bounds to log space
+
+        while (np.exp(high_log) - np.exp(low_log)) > 10:  # Terminate when the difference is less than 10
+            mid_log = (low_log + high_log) / 2  # Midpoint in log space
+            mid_cost = np.exp(mid_log)  # Convert back to linear space
 
             # Run the optimization model with the current mid_cost
-            network_copy, component_list_copy = update_fuel_cost(str(lon.values)+str(lat.values), mid_cost, network_copy, component_list_copy, base_costs, case_dict['nyears'])
+            network_copy, component_list_copy = update_fuel_cost(
+                str(lon.values) + str(lat.values), mid_cost, network_copy, component_list_copy, base_costs, case_dict['nyears']
+            )
 
             # Run PyPSA with new costs
             run_pypsa(network_copy, case_dict)
+            write_result(network_copy, case_dict, component_list_copy, file_name, outfile_suffix=f'_{str(lon.values)}_{str(lat.values)}_{condition}')
 
             # Include component statistics also if 0 after optimization
             network_copy.statistics.set_parameters(drop_zero=False)
+
             # Check if the technology is deployed or dominates
             if condition == 'deployed':
                 passed_condition = network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] > 0
             elif condition == 'dominating':
-                passed_condition = network_copy.statistics.supply().loc[('Generator', 'concentrated solar')]/network_copy.statistics.supply().sum() > 0.5
+                passed_condition = (
+                    network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] /
+                    network_copy.statistics.supply().sum()
+                ) > 0.5
 
             if passed_condition:
-                # If the technology is deployed, lower the upper bound
-                high_cost = mid_cost
+                # If the technology is deployed, lower the upper bound in log space
+                high_log = mid_log
             else:
-                # If the technology is not deployed, raise the lower bound
-                low_cost = mid_cost
+                # If the technology is not deployed, raise the lower bound in log space
+                low_log = mid_log
 
-            # Return the midpoint as the breakeven cost
-            breakeven_cost = (low_cost + high_cost) / 2
+        # Return the breakeven cost
+        breakeven_cost = np.exp((low_log + high_log) / 2)
+
 
         # Extract relevant results and store them in the result_array
         return lon, lat, breakeven_cost
@@ -136,7 +149,7 @@ def main():
     tasks = [process_grid_cell(lon, lat) for lon in capacity_factors_csp.x for lat in capacity_factors_csp.y]
     results = compute(*tasks)
 
-    store_results(results, name_suffix, condition)
+    store_results(capacity_factors_csp, results, name_suffix, condition)
 
 
 if __name__ == "__main__":
