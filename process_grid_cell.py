@@ -50,7 +50,7 @@ def update_fuel_cost(cell, fuel_cost, n, comp_list, base_costs, n_years):
     return n, comp_list
 
 
-def process_grid_cell(lon, lat, file_name, condition):
+def process_grid_cell(lon, lat, file_name, gas_cost):
 
 
     name_suffix = file_name.split('/')[-1].split('.')[0].replace('_case', '')
@@ -59,68 +59,84 @@ def process_grid_cell(lon, lat, file_name, condition):
     base_costs = pd.read_csv(case_dict['costs_path'],index_col=[0, 1]).sort_index()
 
 
-    capacity_factors_csp = xr.open_dataset('input_files/world_csp_CF_timeseries_2023_coarse.nc')
-    capacity_factors_pv = xr.open_dataset('input_files/world_solar_CF_timeseries_2023_coarse.nc')
+    capacity_factors_csp = xr.open_dataset('concentrated_solar_capacity_factors/world_csp_CF_timeseries_2023.nc')
+    # capacity_factors_pv = xr.open_dataset('input_files/world_solar_CF_timeseries_2023_coarse.nc')
    
     # Create deep copies of network and component_list
     network_copy = copy.deepcopy(network)
     component_list_copy = copy.deepcopy(component_list)
 
     network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "csp", capacity_factors_csp.sel(x=lon, y=lat))
-    network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "solar", capacity_factors_pv.sel(x=lon, y=lat))
+    # network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "solar", capacity_factors_pv.sel(x=lon, y=lat))
 
+    network_copy, component_list_copy = update_fuel_cost(
+        str(lon) + str(lat), gas_cost, network_copy, component_list_copy, base_costs, case_dict['nyears']
+    )
+    run_pypsa(network_copy, case_dict)
+    write_result(network_copy, case_dict, component_list_copy, file_name, outfile_suffix=f'_gas{gas_cost}_{str(lon)}_{str(lat)}')
 
-    # Binary search in log space to find the breakeven cost
-    low_cost, high_cost = 10., 100000.
-    low_log, high_log = np.log(low_cost), np.log(high_cost)  # Convert bounds to log space
+    # # Binary search in log space to find the breakeven cost
+    # low_cost, high_cost = 1., 1000000.
+    # low_log, high_log = np.log(low_cost), np.log(high_cost)  # Convert bounds to log space
 
-    while (np.exp(high_log) - np.exp(low_log)) > 100:  # Terminate when the difference is less than 10
-        mid_log = (low_log + high_log) / 2  # Midpoint in log space
-        mid_cost = np.exp(mid_log)  # Convert back to linear space
+    # while (np.exp(high_log) - np.exp(low_log)) > 0.001:  # Terminate when the difference is less than 10
+    #     mid_log = (low_log + high_log) / 2  # Midpoint in log space
+    #     mid_cost = np.exp(mid_log)  # Convert back to linear space
+    #     print(f'Mid cost: {mid_cost}')
+    #     # Run the optimization model with the current mid_cost
+    #     network_copy, component_list_copy = update_fuel_cost(
+    #         str(lon) + str(lat), mid_cost, network_copy, component_list_copy, base_costs, case_dict['nyears']
+    #     )
 
-        # Run the optimization model with the current mid_cost
-        network_copy, component_list_copy = update_fuel_cost(
-            str(lon) + str(lat), mid_cost, network_copy, component_list_copy, base_costs, case_dict['nyears']
-        )
+    #     # Run PyPSA with new costs
+    #     run_pypsa(network_copy, case_dict)
+    #     write_result(network_copy, case_dict, component_list_copy, file_name, outfile_suffix=f'_{str(lon)}_{str(lat)}')
 
-        # Run PyPSA with new costs
-        run_pypsa(network_copy, case_dict)
-        write_result(network_copy, case_dict, component_list_copy, file_name, outfile_suffix=f'_{str(lon)}_{str(lat)}_{condition}')
+    #     # Include component statistics also if 0 after optimization
+    #     network_copy.statistics.set_parameters(drop_zero=False)
+    #     print(f'Concentrated solar: {network_copy.statistics.supply().loc[("Generator", "concentrated solar")]}')
+    #     print(f'Load: {network_copy.statistics.withdrawal().loc[("Load", "load")]}')
+    #     # Check if the technology is deployed or dominates
+    #     if condition == 'deployed':
+    #         passed_condition = network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] > 0
+    #         print(f'Passed deployed condition: {passed_condition}')
+    #     elif condition == 'dominating':
+    #         passed_condition = (
+    #             network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] /
+    #             network_copy.statistics.withdrawal().loc[('Load', 'load')]
+    #         ) > 0.5
+    #         print(f'Passed dominating condition: {passed_condition}')
+    #         print(f'Ratio: {network_copy.statistics.supply().loc[("Generator", "concentrated solar")] / network_copy.statistics.withdrawal().loc[("Load", "load")]}')
+    #     else:
+    #         raise ValueError('Invalid condition')
 
-        # Include component statistics also if 0 after optimization
-        network_copy.statistics.set_parameters(drop_zero=False)
+    #     if passed_condition:
+    #         # If the technology is deployed, lower the upper bound in log space
+    #         high_log = mid_log
+    #     else:
+    #         # If the technology is not deployed, raise the lower bound in log space
+    #         low_log = mid_log
 
-        # Check if the technology is deployed or dominates
-        if condition == 'deployed':
-            passed_condition = network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] > 0
-        elif condition == 'dominating':
-            passed_condition = (
-                network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] /
-                network_copy.statistics.supply().sum()
-            ) > 0.5
+    # # Return the breakeven cost
+    # breakeven_cost = np.exp((low_log + high_log) / 2)
 
-        if passed_condition:
-            # If the technology is deployed, lower the upper bound in log space
-            high_log = mid_log
-        else:
-            # If the technology is not deployed, raise the lower bound in log space
-            low_log = mid_log
-
-    # Return the breakeven cost
-    breakeven_cost = np.exp((low_log + high_log) / 2)
+    # Calculate concentrated solar supply as sum of what is dispatched by the generator and storage
+    cs_supply = network_copy.statistics.supply().loc[('Generator', 'concentrated solar')] + network_copy.statistics.supply().loc[('Store', 'molten salt storage')] - network_copy.statistics.withdrawal().loc[('Store', 'molten salt storage')]
+    # Get concentrated solar dispatch fraction
+    cs_fraction = cs_supply / network_copy.statistics.withdrawal().loc[('Load', 'load')]
 
     # Write results to a csv file
-    if not os.path.exists(f'output_data/breakeven_costs_{name_suffix}_{condition}'):
-        os.makedirs(f'output_data/breakeven_{name_suffix}_costs_{condition}')
-    with open(f'output_data/breakeven_costs_{condition}/results_{name_suffix}_{condition}_{str(lon)}_{str(lat)}.csv', 'w') as f:
-        f.write(f'{lon},{lat},{breakeven_cost}\n')
+    if not os.path.exists(f'output_data/cs_fraction_{name_suffix}_gas{gas_cost}'):
+        os.makedirs(f'output_data/cs_fraction_{name_suffix}_gas{gas_cost}')
+    with open(f'output_data/cs_fraction_{name_suffix}_gas{gas_cost}/results_{name_suffix}_gas{gas_cost}_{str(lon)}_{str(lat)}.csv', 'w') as f:
+        f.write(f'{lon},{lat},{cs_fraction}\n')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--file_name', '-f', help='Name of the base case file', required=True)
-    parser.add_argument('--condition', '-c', help='Condition to optimize for', required=True, choices=['deployed', 'dominating'])
     parser.add_argument('--lon', '-x', help='Longitude of the grid cell', required=True)
     parser.add_argument('--lat', '-y', help='Latitude of the grid cell', required=True)
+    parser.add_argument('--gas_cost', '-g', help='Gas cost for the grid cell', required=True)
     args = parser.parse_args()
 
-    process_grid_cell(float(args.lon), float(args.lat), args.file_name, args.condition)
+    process_grid_cell(float(args.lon), float(args.lat), args.file_name, args.gas_cost)
