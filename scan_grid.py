@@ -1,6 +1,8 @@
 import argparse
 import xarray as xr
 import subprocess
+import itertools
+
 
 # Get file name from command line argument
 parser = argparse.ArgumentParser()
@@ -17,33 +19,52 @@ def main():
     # Print x and y size
     print(f"x values: {capacity_factors_csp.x.size}")
     print(f"y values: {capacity_factors_csp.y.size}")
+    
     # Submit a job for each grid cell
-    for lon in capacity_factors_csp.x.values:
-        for lat in capacity_factors_csp.y.values:
-            for gas_cost in [10000]:#[10, 50, 100, 500, 1000]:
+    # All job configurations
+    job_args = list(itertools.product(
+        capacity_factors_csp.x.values,
+        capacity_factors_csp.y.values,
+        [10, 50, 100, 500, 1000]))
 
-                # Construct the command for the job
-                command = [
-                'sbatch',
-                '--job-name', f'grid_cell_{lon}_{lat}_{gas_cost}',
-                '--output', f'logs/grid_cell_{lon}_{lat}_{gas_cost}.out',
-                '--time', '24:00:00',
-                '--error', f'logs/grid_cell_{lon}_{lat}_{gas_cost}.err',
-                '--wrap',
-                f'cd /groups/carnegie_poc/awongel/clab_concentrated_solar && '
-                'source /home/awongel/miniconda3/etc/profile.d/conda.sh && '
-                'export GRB_LICENSE_FILE=/central/software/gurobi/gurobi1000/linux64/license_files/gurobi.lic && '
-                'conda activate table_pypsa_env && '
+    # Batch size: how many jobs per SLURM submission
+    batch_size = 100
+
+    # Break into batches
+    for i in range(0, len(job_args), batch_size):
+        batch = job_args[i:i+batch_size]
+
+        job_name = f'grid_batch_{i}'
+        out_log = f'logs/grid_batch_{i}.out'
+        err_log = f'logs/grid_batch_{i}.err'
+
+        # Build inner command: one python call per (lon, lat, gas_cost)
+        inner_commands = []
+        for lon, lat, gas_cost in batch:
+            inner_commands.append(
                 f'python process_grid_cell.py --lon {lon} --lat {lat} -f {file_name} --gas_cost {gas_cost}'
-                ]
+            )
+        inner_script = ' && '.join(inner_commands)
 
+        # Full sbatch command
+        command = [
+            'sbatch',
+            '--job-name', job_name,
+            '--output', out_log,
+            '--time', '24:00:00',
+            '--error', err_log,
+            '--wrap',
+            f'cd /groups/carnegie_poc/awongel/clab_concentrated_solar && '
+            'source /home/awongel/miniconda3/etc/profile.d/conda.sh && '
+            'export GRB_LICENSE_FILE=/central/software/gurobi/gurobi1000/linux64/license_files/gurobi.lic && '
+            'conda activate table_pypsa_env && '
+            + inner_script
+        ]
 
-                # Submit the job
-                try:
-                    result = subprocess.run(command, check=True, capture_output=True, text=True)
-                    print(f"Job submitted for grid cell ({lon}, {lat} and gas cost {gas_cost}). Job ID: {result.stdout.strip()}")
-                except subprocess.CalledProcessError as e:
-                    print(f"Failed to submit job for grid cell ({lon}, {lat} and gas cost {gas_cost}). Error: {e.stderr.strip()}")
+        # Submit the job
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        print(f'Submitted job {job_name}')
+
 
 if __name__ == "__main__":
     main()
