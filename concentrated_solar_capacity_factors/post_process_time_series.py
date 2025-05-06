@@ -7,6 +7,25 @@ parser = argparse.ArgumentParser(description="Process annual mean capacity facto
 parser.add_argument("--cf_type", "-c", type=str, help="Capacity factor type (wind, solar or csp)")
 
 
+def coarsen_nearest_center(ds, x='x', y='y', factor_x=2, factor_y=2):
+    # Trim dimensions to be divisible by the coarsening factors
+    nx = ds.sizes[x] - (ds.sizes[x] % factor_x)
+    ny = ds.sizes[y] - (ds.sizes[y] % factor_y)
+    ds = ds.isel({x: slice(0, nx), y: slice(0, ny)})
+
+    # Calculate center offsets
+    offset_x = factor_x // 2
+    offset_y = factor_y // 2
+
+    # Subsample using center of each block
+    ds_coarse = ds.isel({
+        x: slice(offset_x, nx, factor_x),
+        y: slice(offset_y, ny, factor_y)
+    })
+
+    return ds_coarse
+
+
 def process_time_series(cf_type):
     """
     Processes and merges monthly NetCDF files into a single file with hourly resolution.
@@ -37,7 +56,7 @@ def process_time_series(cf_type):
         # Drop edge y-coordinate to make coarsening work
         ds = ds.isel(y=slice(0, -7))
         # Apply spatial downsampling
-        ds = ds.coarsen(x=factor_x, y=factor_y, boundary="trim").mean()
+        ds = coarsen_nearest_center(ds, x='x', y='y', factor_x=factor_x, factor_y=factor_y)
 
         # Initialize merged_ds on first iteration
         if merged_ds is None:

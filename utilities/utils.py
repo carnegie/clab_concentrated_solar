@@ -26,74 +26,97 @@ def mask_data_world(data, world):
     return masked_data
 
 
-def fill_results_from_csv(result_array, case, cond):
+
+def get_cs_fraction(result_data):
     """
-    Fill the results array with the results from the csv files
+    Get the cs fraction from the result data
     """
-    # Load the results from the csv files
-    csv_dir = f'output_data/cfs_mean/cfs_mean/cfs_mean/cs_fraction_{case}_gas{cond}/'
-    for file in os.listdir(csv_dir):
-        result = np.loadtxt(csv_dir + file, delimiter=',')
-        result_array.loc[{'x': result[0], 'y': result[1]}] = result[2]
-    return result_array
+        # Calculate concentrated solar supply as sum of what is dispatched by the generator and storage
+    cs_supply = result_data["component results"]["Supply [MW]"].loc[("Generator", "csp glasspoint")] + result_data["component results"]["Supply [MW]"].loc[('Store', 'molten-salt-store glasspoint')] - result_data["component results"]["Withdrawal [MW]"].loc[('Store', 'molten-salt-store glasspoint')]
+    # Get concentrated solar dispatch fraction
+    cs_fraction = cs_supply / result_data["component results"]["Withdrawal [MW]"].loc[('Load', 'load')]
+
+    return cs_fraction
 
 
-def fill_results_from_pickle(result_array, case, cond):
+def get_storage_ratio(result_data):
+    """
+    Get the storage ratio from the result data
+    """
+    storage_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Store", "molten-salt-store glasspoint")]
+    generator_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Generator", "csp glasspoint")]
+
+    if not generator_capacity == 0:
+        storage_ratio = storage_capacity / generator_capacity
+    else:
+        storage_ratio = np.nan
+
+    return storage_ratio
+
+
+def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5):
     """
     Fill the results array with the results from the pickle files
     """
-    pickle_path = f'output_data/cfs_mean/{case.lower()}/{case.lower()}_gas{cond}_*.pickle'
+    pickle_path = f'output_data/{case.lower()}/{case.lower()}_gas{cond}_*.pickle'
     for file in glob.glob(pickle_path):
 
         with open(file, 'rb') as f:
             result_data = pickle.load(f)
         f.close()
 
-        storage_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Store", "molten-salt-store glasspoint")]
-        cs_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Generator", "csp glasspoint")]
 
         # Extract the x and y coordinates from the file name
         x = float(file.split('_')[-2])
         y = float(file.split('_')[-1].replace('.pickle', ''))
-        
-        # Ratio of storage capacity to csp capacity
-        if not cs_capacity == 0:
-            ratio = storage_capacity / cs_capacity
+
+
+        # Get the value of the variable
+        if var == 'cs_fraction':
+            value = get_cs_fraction(result_data)
+        elif var == 'storage_ratio':
+            value = get_storage_ratio(result_data)
+        elif var == 'gas_price_min_frac':
+            cs_fraction = get_cs_fraction(result_data)
+            if cs_fraction >= csfrac_threshold:
+                value = result_array.loc[{'x': result_array.x.sel(x=x, method="nearest"),
+                                        'y': result_array.y.sel(y=y, method="nearest")}].item()
+                if pd.isna(value) or float(cond) < value:
+                    value = float(cond)
+
+            else:
+                value = np.nan
         else:
-            ratio = np.nan
+            raise ValueError(f"Variable {var} not supported")
 
         result_array.loc[{'x': result_array.x.sel(x=x, method="nearest"), 
-                  'y': result_array.y.sel(y=y, method="nearest")}] = ratio
+                        'y': result_array.y.sel(y=y, method="nearest")}] = value
+            
     return result_array
 
 
 
-def store_results_map(case, cond, variable):
+def store_results_map(case, cond, variable, result_array=None):
     """
     Store the results of the breakeven cost analysis in a netcdf file.
     """
-    if not os.path.exists(f'output_data/cfs_mean/{variable}_{case}_gas{cond}.nc'):
-        cap_fac = xr.open_dataset('concentrated_solar_capacity_factors/world_csp_CF_timeseries_2023.nc')
-
-        # Create xarray to store results
-        result_array = xr.DataArray(
-            data=None,
-            dims=['x', 'y'],
-            coords={
-                'x': cap_fac.x,
-                'y': cap_fac.y},
-            name='breakeven_cost')
+    filename = f'output_data/{variable}_{case}_gas{cond}.nc' if variable != 'gas_price_min_frac' else f'output_data/{variable}_{case}_threshold0p5.nc'
+    if not os.path.exists(filename):
         
-        if variable=='cs_fraction':
-            result_array = fill_results_from_csv(result_array, case, cond)
-        elif variable=='storage_ratio':
-            result_array = fill_results_from_pickle(result_array, case, cond)
+        if result_array is None:
+            cap_fac = xr.open_dataset('concentrated_solar_capacity_factors/world_csp_CF_timeseries_2023.nc')
+            # Create xarray to store results
+            result_array = xr.DataArray(
+                data=None,
+                dims=['x', 'y'],
+                coords={
+                    'x': cap_fac.x,
+                    'y': cap_fac.y},
+                name='value')
+        
+        result_array = fill_results_from_pickle(result_array, case, cond, variable)
 
-        # Remove existing file
-        if os.path.exists(f'output_data/cfs_mean/{variable}_{case}_gas{cond}.nc'):
-            os.remove(f'output_data/cfs_mean/cfs_mean/{variable}_{case}_gas{cond}.nc')
-        # Save the results to a netcdf file
-        result_array.to_netcdf(f'output_data/cfs_mean/cfs_mean/{variable}_{case}_gas{cond}.nc')
+    return result_array
 
 
 def compute_equal_area_bands(num_bands=10):
@@ -149,13 +172,13 @@ def calculate_lat_band_mean(lat_bands_df, masked_dataset, lat_bands, gas_cost):
         # Store the results in a dataframe
         add_to_df = pd.DataFrame()
         add_to_df['latitude band'] = labels
-        add_to_df['mean cs fraction'] = [np.nanmean(ns_merged_bands[label]['breakeven_cost'].values) for label in labels]
-        add_to_df['std cs fraction'] = [np.nanstd(ns_merged_bands[label]['breakeven_cost'].values) for label in labels]
-        add_to_df['median cs fraction'] = [np.nanmedian(ns_merged_bands[label]['breakeven_cost'].values) for label in labels]
+        add_to_df['mean cs fraction'] = [np.nanmean(ns_merged_bands[label]['value'].values) for label in labels]
+        add_to_df['std cs fraction'] = [np.nanstd(ns_merged_bands[label]['value'].values) for label in labels]
+        add_to_df['median cs fraction'] = [np.nanmedian(ns_merged_bands[label]['value'].values) for label in labels]
 
         # Compute interquartile range (IQR) while ignoring NaNs
-        q1_values = [np.nanpercentile(ns_merged_bands[label]['breakeven_cost'], 25) for label in labels]
-        q3_values = [np.nanpercentile(ns_merged_bands[label]['breakeven_cost'], 75) for label in labels]
+        q1_values = [np.nanpercentile(ns_merged_bands[label]['value'], 25) for label in labels]
+        q3_values = [np.nanpercentile(ns_merged_bands[label]['value'], 75) for label in labels]
 
         # Error bars
         add_to_df['lower_error'] = add_to_df['median cs fraction'] - q1_values

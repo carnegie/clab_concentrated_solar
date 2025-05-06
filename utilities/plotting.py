@@ -6,7 +6,7 @@ import seaborn as sns
 import os
 import xarray as xr
 from utilities.utils import mask_data_world, compute_equal_area_bands
-
+from matplotlib.colors import LogNorm
 
 def get_world():
     """
@@ -19,53 +19,74 @@ def get_world():
 
     return world
 
+def overlay_gas_infrastructure(ax):
+    """
+    Overlay the gas infrastructure on the world map.
+    """
+    gas_infrastructure_path = 'input_files/GEM-GGIT-Gas-Pipelines-2024-12/GEM-GGIT-Gas-Pipelines-2024-12.geojson'
+    gas_infrastructure = gpd.read_file(gas_infrastructure_path)
+    gas_infrastructure.plot(ax=ax, color='darkred', linewidth=0.5)
 
-def plot_result_map(file_path, case_name, title, cmap_label):
+
+def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=False):
     """
     Plot the world map with data.
     """
-
     dataset = xr.open_dataset(file_path)
     dataset.close()
-    # Reindex the dataset to 0.25 degree resolution
+
     dataset = dataset.reindex(x=np.arange(-180, 180.25, 0.25), y=np.arange(-57, 85.25, 0.25), method='nearest')
-
-    # Get world map
     world = get_world()
-
-    # Mask dataset with world map
     masked_dataset = mask_data_world(dataset, world)
 
-    # Plot the result with 1 step on x axis is the same as 1 step on y axis
-    # use log scale for colorbar
-    aspect_ratio = (dataset['x'].max()-dataset['x'].min())/(dataset['y'].max()-dataset['y'].min())
+    gas_cost = title.replace("Gas cost = $", "").replace("/MWh", "")
     if 'fraction' in cmap_label:
         cmap = 'viridis'
-        label = 'fraction'
+        norm = None
+        label = f'gas{gas_cost}_fraction'
+        cbar_ticks = [0, 0.25, 0.5, 0.75, 1]
+    elif 'fuel' in cmap_label:
+        cmap = 'cividis'
+        norm = LogNorm(vmin=10, vmax=10000)
+        label = 'threshold'
+        cbar_ticks = [10, 100, 1000, 10000]
     else:
         cmap = 'inferno'
-        label = 'time'
-    masked_dataset[f'breakeven_cost'].plot(x='x', y='y', aspect=aspect_ratio, size=5, cmap=cmap, cbar_kwargs={'label': cmap_label}, vmin=0)#, vmax=1)
+        norm = plt.Normalize(vmin=0, vmax=10)
+        label = f'gas{gas_cost}_time'
+        cbar_ticks = [0, 5, 10]
 
-    # Remove x and y labels and ticks
-    plt.gca().set_xticks([])
-    plt.gca().set_yticks([])
-    plt.gca().set_xlabel('')
-    plt.gca().set_ylabel('')
-    # Add title
-    plt.gca().set_title(title)
-    # Remove box around the plot
+    aspect_ratio = (dataset['x'].max() - dataset['x'].min()) / (dataset['y'].max() - dataset['y'].min())
+
+    p = masked_dataset['value'].plot(
+        x='x', y='y', aspect=aspect_ratio, size=5,
+        cmap=cmap, norm=norm,
+        cbar_kwargs={'label': cmap_label, 'ticks': cbar_ticks},
+    )
+
+    p.set_rasterized(True)
+
+    ax = plt.gca()
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xlabel('')
+    ax.set_ylabel('')
+    ax.set_title(title)
+
     for edge in ['top', 'right', 'bottom', 'left']:
-        plt.gca().spines[edge].set_visible(False)
+        ax.spines[edge].set_visible(False)
 
-    # Add world map outline in light grey
-    world.boundary.plot(ax=plt.gca(), color='lightgrey', linewidth=0.5)
+    world.boundary.plot(ax=ax, color='lightgrey', linewidth=0.5)
 
-    # Save the plot
+    if gas_infrastructure:
+        overlay_gas_infrastructure(ax)
+        label += '_gas_infrastructure'
+
     if not os.path.exists('figures'):
         os.makedirs('figures')
-    gas_cost = title.replace("Gas cost = $", "").replace("/MWh", "")
-    plt.savefig(f'figures/csp_fraction_map_{case_name}_gas{gas_cost}_{label}.pdf', bbox_inches='tight', dpi=200)
+    plt.savefig(f'figures/csp_map_{case_name}_{label}.pdf', bbox_inches='tight', dpi=300)
+
+
 
 
 def plot_lat_bands(world):
@@ -104,7 +125,7 @@ def plot_lat_bands(world):
 
 
 
-def plot_line(lat_df, colors):
+def plot_line(lat_df, colors, var):
     """
     Plot the mean cs fraction for each latitudinal band vs the gas cost.
     """
@@ -118,13 +139,21 @@ def plot_line(lat_df, colors):
                      yerr=[lat_df_sub['lower_error'], lat_df_sub['upper_error']],
                       fmt='o', color=colors[i], markersize=4, capsize=4,label=lat)
                 
-
     # x-axis log scale
     plt.xscale('log')
 
     plt.xlabel('Gas cost ($/MWh)')
-    plt.ylabel('Concentrated solar fraction')
-    plt.legend()
+    if var == 'cs_fraction':
+        plt.ylabel('Concentrated solar fraction')
+        # Replace y-axis tick label 0.1 with 10% etc
+        ax = plt.gca()
+        ax.yaxis.tick_right()         # Move ticks to the right
+        ax.yaxis.set_label_position('right')  # Move label to the right
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, pos: f'{int(x*100)}%'))
+        
+    else:
+        plt.ylabel('Charging time (h)')
+    plt.legend()    
 
     plt.title('Median concentrated solar fraction with 10th and 90th percentile')
-    plt.savefig('figures/median_cs_fraction_vs_gas_cost.pdf', bbox_inches='tight')
+    plt.savefig(f'figures/median_{var}_vs_gas_cost.pdf', bbox_inches='tight')

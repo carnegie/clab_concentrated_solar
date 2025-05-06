@@ -25,7 +25,9 @@ def main():
     job_args = list(itertools.product(
         capacity_factors_csp.x.values,
         capacity_factors_csp.y.values,
-        [10, 50, 100, 500, 1000]))
+        # [10, 50, 100, 500, 1000, 10000]
+        # [25, 250, 750, 2500, 7500]
+        [5000]))
 
     # Batch size: how many jobs per SLURM submission
     batch_size = 100
