@@ -2,17 +2,41 @@ import os
 import glob
 import pickle
 import numpy as np
+import geopandas as gpd
 import xarray as xr
 import pandas as pd
 import shapely.vectorized as sv
 
+def get_world():
+    """
+    Get world map from shapefile.
+    """
+    # Load the world shapefile
+    world = gpd.read_file('input_files/ne_110m_admin_0_countries.shp')
 
-def mask_data_world(data, world):
+    # Drop Antarctica by excluding everyhting below -60 latitude
+    world = world[world.geometry.centroid.y > -60]
+
+    return world
+
+def get_country(country_name):
+    """
+    Get country map from shapefile.
+    """
+    # Load the world shapefile
+    world = gpd.read_file('input_files/ne_110m_admin_0_countries.shp')
+
+    # Filter the world GeoDataFrame to get the specific country
+    country = world[world['NAME'] == country_name]
+
+    return country
+
+def mask_data_region(data, region):
     """
     Mask data with world shapefile.
     """
     # Extract the geometry from the GeoSeries (use union_all if there are multiple polygons)
-    region_geom = world.geometry.union_all() if len(world) > 1 else world.geometry.iloc[0]
+    region_geom = region.geometry.union_all() if len(region) > 1 else region.geometry.iloc[0]
 
     # Get the grid of coordinates (lon, lat) from the xarray DataArray
     lon, lat = np.meshgrid(data['x'], data['y'], indexing='ij')
@@ -83,9 +107,10 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
                                         'y': result_array.y.sel(y=y, method="nearest")}].item()
                 if pd.isna(value) or float(cond) < value:
                     value = float(cond)
-
             else:
                 value = np.nan
+        elif var == 'system_cost':
+            value = result_data["component results"]["Capital Expenditure [$]"].sum() + result_data["component results"]["Operational Expenditure [$]"].sum()
         else:
             raise ValueError(f"Variable {var} not supported")
 
@@ -96,11 +121,11 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
 
 
 
-def store_results_map(case, cond, variable, result_array=None):
+def store_results_map(case, cond, variable, result_array=None, csfrac_threshold=0.5):
     """
     Store the results of the breakeven cost analysis in a netcdf file.
     """
-    filename = f'output_data/{variable}_{case}_gas{cond}.nc' if variable != 'gas_price_min_frac' else f'output_data/{variable}_{case}_threshold0p5.nc'
+    filename = f'output_data/{variable}_{case}_gas{cond}.nc' if variable != 'gas_price_min_frac' else f'output_data/{variable}_{case}_threshold{str(csfrac_threshold).replace(".", "p")}.nc'
     if not os.path.exists(filename):
         
         if result_array is None:
@@ -114,7 +139,7 @@ def store_results_map(case, cond, variable, result_array=None):
                     'y': cap_fac.y},
                 name='value')
         
-        result_array = fill_results_from_pickle(result_array, case, cond, variable)
+        result_array = fill_results_from_pickle(result_array, case, cond, variable, csfrac_threshold)
 
     return result_array
 
@@ -190,3 +215,39 @@ def calculate_lat_band_mean(lat_bands_df, masked_dataset, lat_bands, gas_cost):
         lat_bands_df = pd.concat([lat_bands_df, add_to_df])
 
         return lat_bands_df
+
+def calculate_country_mean(df, dataset, countries, gas_cost):
+    """
+    Calculate the mean concentrated solar fraction for each country and store the results in a dictionary.
+    """
+    # Calculate the mean cs fraction for each country
+    cs_frac_countries = [mask_data_region(dataset, get_country(country)) for country in countries]
+
+    # Store the results in a dataframe
+    add_to_df = pd.DataFrame()
+    add_to_df['country'] = countries
+    add_to_df['mean cs fraction'] = [np.nanmean(cs_frac_country['value'].values) for cs_frac_country in cs_frac_countries]
+    add_to_df['std cs fraction'] = [np.nanstd(cs_frac_country['value'].values) for cs_frac_country in cs_frac_countries]
+    add_to_df['median cs fraction'] = [np.nanmedian(cs_frac_country['value'].values) for cs_frac_country in cs_frac_countries]
+
+    # Compute interquartile range (IQR) while ignoring NaNs
+    q1_values = [np.nanpercentile(cs_frac_country['value'], 25) for cs_frac_country in cs_frac_countries]
+    q3_values = [np.nanpercentile(cs_frac_country['value'], 75) for cs_frac_country in cs_frac_countries]
+
+    # Error bars
+    add_to_df['lower_error'] = add_to_df['median cs fraction'] - q1_values
+    add_to_df['upper_error'] = q3_values - add_to_df['median cs fraction']
+
+    add_to_df['gas cost'] = gas_cost
+
+    # Add the results to the dataframe
+    df = pd.concat([df, add_to_df])
+
+    return df
+
+
+def calculate_marginal_abatement_cost(df_countries, gas_cost):
+    """
+    Calculate the marginal abatement cost for each country.
+    """
+    

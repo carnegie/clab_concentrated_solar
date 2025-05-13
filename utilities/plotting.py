@@ -1,23 +1,13 @@
 import numpy as np
-import pandas as pd
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import xarray as xr
-from utilities.utils import mask_data_world, compute_equal_area_bands
+from utilities.utils import get_world, mask_data_region, compute_equal_area_bands
 from matplotlib.colors import LogNorm
 
-def get_world():
-    """
-    Get world map from shapefile.
-    """
-    # Load the world shapefile
-    world = gpd.read_file('input_files/ne_110m_admin_0_countries.shp')
-    # Drop Antarctica by excluding everyhting below -60 latitude
-    world = world[world.geometry.centroid.y > -60]
 
-    return world
 
 def overlay_gas_infrastructure(ax):
     """
@@ -37,7 +27,9 @@ def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=
 
     dataset = dataset.reindex(x=np.arange(-180, 180.25, 0.25), y=np.arange(-57, 85.25, 0.25), method='nearest')
     world = get_world()
-    masked_dataset = mask_data_world(dataset, world)
+    masked_dataset = mask_data_region(dataset, world)
+    masked_dataset = masked_dataset.where(masked_dataset['value'] > 0)
+
 
     gas_cost = title.replace("Gas cost = $", "").replace("/MWh", "")
     if 'fraction' in cmap_label:
@@ -46,36 +38,38 @@ def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=
         label = f'gas{gas_cost}_fraction'
         cbar_ticks = [0, 0.25, 0.5, 0.75, 1]
     elif 'fuel' in cmap_label:
-        cmap = 'cividis'
+        cmap = 'inferno'
         norm = LogNorm(vmin=10, vmax=10000)
-        label = 'threshold'
+        label = file_path.split('_')[-1].split('.')[0]
         cbar_ticks = [10, 100, 1000, 10000]
     else:
-        cmap = 'inferno'
+        cmap = 'cividis'
         norm = plt.Normalize(vmin=0, vmax=10)
         label = f'gas{gas_cost}_time'
         cbar_ticks = [0, 5, 10]
 
     aspect_ratio = (dataset['x'].max() - dataset['x'].min()) / (dataset['y'].max() - dataset['y'].min())
 
+    fig, ax = plt.subplots(figsize=(8, 5))  # explicitly create ax
+
     p = masked_dataset['value'].plot(
-        x='x', y='y', aspect=aspect_ratio, size=5,
-        cmap=cmap, norm=norm,
-        cbar_kwargs={'label': cmap_label, 'ticks': cbar_ticks},
-    )
+    x='x', y='y', ax=ax, cmap=cmap, norm=norm,
+    cbar_kwargs={'label': cmap_label, 'ticks': cbar_ticks, 'shrink': 0.8, 'pad': 0.02},)
 
     p.set_rasterized(True)
 
-    ax = plt.gca()
+    ax.set_aspect(aspect_ratio)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_xlabel('')
     ax.set_ylabel('')
     ax.set_title(title)
 
+
     for edge in ['top', 'right', 'bottom', 'left']:
         ax.spines[edge].set_visible(False)
 
+    world["geometry"] = world["geometry"].simplify(0.5)
     world.boundary.plot(ax=ax, color='lightgrey', linewidth=0.5)
 
     if gas_infrastructure:
@@ -84,7 +78,10 @@ def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=
 
     if not os.path.exists('figures'):
         os.makedirs('figures')
-    plt.savefig(f'figures/csp_map_{case_name}_{label}.pdf', bbox_inches='tight', dpi=300)
+    
+    fig.canvas.draw()  # Forces all artists to be fully rendered before saving
+    plt.savefig(f'figures/csp_map_{case_name}_{label}.pdf', bbox_inches='tight', dpi=300, rasterized=True)
+    plt.savefig(f'figures/csp_map_{case_name}_{label}.png', bbox_inches='tight', dpi=300)
 
 
 
@@ -125,35 +122,49 @@ def plot_lat_bands(world):
 
 
 
-def plot_line(lat_df, colors, var):
+def plot_line(lat_df, country, color, var='cs_fraction'):
     """
     Plot the mean cs fraction for each latitudinal band vs the gas cost.
     """
     plt.figure()
     # Plot the mean cs fraction for each latitudinal band vs the gas cost with error bars
-    for i, lat in enumerate(lat_df['latitude band'].unique()):
-        lat_df_sub = lat_df.loc[lat_df['latitude band'] == lat]
-        plt.plot(lat_df_sub['gas cost'], lat_df_sub['median cs fraction'], color=colors[i])
-        plt.errorbar(lat_df_sub['gas cost'], lat_df_sub['median cs fraction'], 
-                     # Errors as interquartile range
-                     yerr=[lat_df_sub['lower_error'], lat_df_sub['upper_error']],
-                      fmt='o', color=colors[i], markersize=4, capsize=4,label=lat)
+    lat_df_sub = lat_df.loc[lat_df['country'] == country]
+    plt.plot(lat_df_sub['gas cost'], lat_df_sub['median cs fraction'], color=color)
+    plt.plot(lat_df_sub['gas cost'], lat_df_sub['median cs fraction'], color=color, marker='o', markersize=5, label=country)
+    # Draw band instead of error bars
+    plt.fill_between(lat_df_sub['gas cost'], lat_df_sub['median cs fraction']-lat_df_sub['lower_error'], 
+                     lat_df_sub['median cs fraction']+lat_df_sub['upper_error'], alpha=0.2, color=color,
+                     label=f'{country} error band')
                 
     # x-axis log scale
     plt.xscale('log')
 
-    plt.xlabel('Gas cost ($/MWh)')
+    plt.xlabel('Gas cost ($/MWh)', fontsize=14)
     if var == 'cs_fraction':
-        plt.ylabel('Concentrated solar fraction')
+        plt.ylabel('Concentrated solar fraction', fontsize=14)
         # Replace y-axis tick label 0.1 with 10% etc
         ax = plt.gca()
-        ax.yaxis.tick_right()         # Move ticks to the right
-        ax.yaxis.set_label_position('right')  # Move label to the right
         ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, pos: f'{int(x*100)}%'))
         
     else:
-        plt.ylabel('Charging time (h)')
+        plt.ylabel('Charging time (h)', fontsize=14)
+        # y-axis range
+        plt.ylim(0, 20)
+    
+    # Make all labels larger
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    
     plt.legend()    
+    plt.savefig(f'figures/median_{var}_vs_gas_cost_{country}.pdf', bbox_inches='tight')
 
-    plt.title('Median concentrated solar fraction with 10th and 90th percentile')
-    plt.savefig(f'figures/median_{var}_vs_gas_cost.pdf', bbox_inches='tight')
+def plot_marginal_abatement_cost(country_df, country, color):
+    """
+    Plot the marginal abatement cost.
+    """
+    plt.figure()
+    country_df_sub = country_df.loc[country_df['country'] == country]
+    # Calculate Marginal Abatement Cost (MAC)
+    mac = (country_df_sub['system_cost'] - country_df_sub['gas cost']) / (1 - country_df_sub['cs_fraction'])
+    plt.plot(country_df_sub['median cs fraction'], mac, color=color)
+
