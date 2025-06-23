@@ -6,6 +6,7 @@ import geopandas as gpd
 import xarray as xr
 import pandas as pd
 import shapely.vectorized as sv
+from shapely.geometry import box
 
 def get_world():
     """
@@ -29,6 +30,13 @@ def get_country(country_name):
     # Filter the world GeoDataFrame to get the specific country
     country = world[world['NAME'] == country_name]
 
+    # For the US, remove Alaska and Hawaii
+    if country_name == 'United States of America':
+        # Only keep contiguous US
+        contiguous_48_bbox = box(minx=-125, miny=24.396308, maxx=-66.93457, maxy=49.384358)
+        # Clip the US geometry to the bounding box
+        country = country.geometry.intersection(contiguous_48_bbox)
+
     return country
 
 def mask_data_region(data, region):
@@ -48,7 +56,6 @@ def mask_data_region(data, region):
     masked_data = data.where(mask)
 
     return masked_data
-
 
 
 def get_cs_fraction(result_data):
@@ -71,7 +78,7 @@ def get_storage_ratio(result_data):
     generator_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Generator", "csp glasspoint")]
 
     if not generator_capacity == 0:
-        storage_ratio = storage_capacity / generator_capacity
+        storage_ratio = storage_capacity #/ generator_capacity
     else:
         storage_ratio = np.nan
 
@@ -98,11 +105,12 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
         # Get the value of the variable
         if var == 'cs_fraction':
             value = get_cs_fraction(result_data)
+            print(value)
         elif var == 'storage_ratio':
             value = get_storage_ratio(result_data)
         elif var == 'gas_price_min_frac':
             cs_fraction = get_cs_fraction(result_data)
-            if cs_fraction >= csfrac_threshold:
+            if cs_fraction > csfrac_threshold:
                 value = result_array.loc[{'x': result_array.x.sel(x=x, method="nearest"),
                                         'y': result_array.y.sel(y=y, method="nearest")}].item()
                 if pd.isna(value) or float(cond) < value:
@@ -118,7 +126,6 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
                         'y': result_array.y.sel(y=y, method="nearest")}] = value
             
     return result_array
-
 
 
 def store_results_map(case, cond, variable, result_array=None, csfrac_threshold=0.5):
@@ -144,110 +151,75 @@ def store_results_map(case, cond, variable, result_array=None, csfrac_threshold=
     return result_array
 
 
-def compute_equal_area_bands(num_bands=10):
-    """
-    Compute latitudinal bands that divide the Earth's total surface area (land + ocean) equally.
-    """    
-    # Define latitude bins (1-degree resolution for accuracy)
-    lat_bins = np.arange(-60, 90, 1)  # Cover full latitude range
-    
-    # Earth's total surface area in square km
-    R = 6371  # Earth radius in km
-
-    # Compute total area per latitude band using the spherical cap formula
-    total_areas = []
-    for i in range(len(lat_bins) - 1):
-        lat_min, lat_max = np.radians(lat_bins[i]), np.radians(lat_bins[i + 1])
-        strip_area = 2 * np.pi * R**2 * (np.sin(lat_max) - np.sin(lat_min))
-        total_areas.append((lat_bins[i], lat_bins[i + 1], strip_area))
-
-    # Convert to NumPy array
-    total_areas = np.array(total_areas, dtype=[('lat_min', 'f4'), ('lat_max', 'f4'), ('area', 'f4')])
-
-    # Compute cumulative total area
-    total_area = total_areas['area'].sum()
-    cumulative_area = np.cumsum(total_areas['area'])
-
-    # Identify breakpoints for equal-area division
-    band_edges = np.interp(
-        np.linspace(0, total_area, num_bands + 1),
-        cumulative_area, 
-        total_areas['lat_max']
-    )
-
-    return band_edges
-
-
-def calculate_lat_band_mean(lat_bands_df, masked_dataset, lat_bands, gas_cost):
-        """
-        Calculate the mean concentrated solar fraction for each latitudinal band and store the results in a dictionary.
-        """
-
-        # Calculate the mean cs fraction for each latitudinal band
-        cs_frac_bands = [masked_dataset.sel(y=slice(lat_min, lat_max)) for lat_min, lat_max in lat_bands]
-
-        # Concatenate north and south bands by combining the first and last band, the second and second last band, etc.
-        half_n = len(cs_frac_bands) // 2
-        labels = ['high-latitudes', 'mid-latitudes', 'subtropical', 'tropical', 'equatorial']
-        ns_merged_bands = {}
-
-        for i in range(half_n):
-            ns_merged_bands[labels[i]] = cs_frac_bands[i].merge(cs_frac_bands[len(cs_frac_bands)-1-i])
-
-        # Store the results in a dataframe
-        add_to_df = pd.DataFrame()
-        add_to_df['latitude band'] = labels
-        add_to_df['mean cs fraction'] = [np.nanmean(ns_merged_bands[label]['value'].values) for label in labels]
-        add_to_df['std cs fraction'] = [np.nanstd(ns_merged_bands[label]['value'].values) for label in labels]
-        add_to_df['median cs fraction'] = [np.nanmedian(ns_merged_bands[label]['value'].values) for label in labels]
-
-        # Compute interquartile range (IQR) while ignoring NaNs
-        q1_values = [np.nanpercentile(ns_merged_bands[label]['value'], 25) for label in labels]
-        q3_values = [np.nanpercentile(ns_merged_bands[label]['value'], 75) for label in labels]
-
-        # Error bars
-        add_to_df['lower_error'] = add_to_df['median cs fraction'] - q1_values
-        add_to_df['upper_error'] = q3_values - add_to_df['median cs fraction']
-
-        add_to_df['gas cost'] = gas_cost
-
-        # Add the results to the dataframe
-        lat_bands_df = pd.concat([lat_bands_df, add_to_df])
-
-        return lat_bands_df
-
-def calculate_country_mean(df, dataset, countries, gas_cost):
-    """
-    Calculate the mean concentrated solar fraction for each country and store the results in a dictionary.
-    """
-    # Calculate the mean cs fraction for each country
+def calculate_country_mean(df, dataset, var, countries, gas_cost):
     cs_frac_countries = [mask_data_region(dataset, get_country(country)) for country in countries]
 
-    # Store the results in a dataframe
-    add_to_df = pd.DataFrame()
-    add_to_df['country'] = countries
-    add_to_df['mean cs fraction'] = [np.nanmean(cs_frac_country['value'].values) for cs_frac_country in cs_frac_countries]
-    add_to_df['std cs fraction'] = [np.nanstd(cs_frac_country['value'].values) for cs_frac_country in cs_frac_countries]
-    add_to_df['median cs fraction'] = [np.nanmedian(cs_frac_country['value'].values) for cs_frac_country in cs_frac_countries]
+    new_df = pd.DataFrame({
+        'country': countries,
+        'gas cost': gas_cost,
+        f'median {var}': [np.nanmedian(cs['value'].values) for cs in cs_frac_countries],
+        f'lower error {var}': [
+            np.nanmedian(cs['value'].values) - np.nanpercentile(cs['value'], 10) for cs in cs_frac_countries
+        ],
+        f'upper error {var}': [
+            np.nanpercentile(cs['value'], 90) - np.nanmedian(cs['value'].values) for cs in cs_frac_countries
+        ]
+    })
 
-    # Compute interquartile range (IQR) while ignoring NaNs
-    q1_values = [np.nanpercentile(cs_frac_country['value'], 25) for cs_frac_country in cs_frac_countries]
-    q3_values = [np.nanpercentile(cs_frac_country['value'], 75) for cs_frac_country in cs_frac_countries]
-
-    # Error bars
-    add_to_df['lower_error'] = add_to_df['median cs fraction'] - q1_values
-    add_to_df['upper_error'] = q3_values - add_to_df['median cs fraction']
-
-    add_to_df['gas cost'] = gas_cost
-
-    # Add the results to the dataframe
-    df = pd.concat([df, add_to_df])
-
-    return df
-
-
-def calculate_marginal_abatement_cost(df_countries, gas_cost):
-    """
-    Calculate the marginal abatement cost for each country.
-    """
+    if df.empty:
+        return new_df
+    else:
+        df = pd.concat([df, new_df], ignore_index=True)
+        return df
     
+
+def read_output_file(file_path):
+    """
+    Read the pickle file and return the data, averaging over 5 days to smooth curves
+    """
+    with open(file_path, 'rb') as f:
+        result_data = pickle.load(f)
+    f.close()
+
+    # Average over 5 days
+    result_data['time results'] = result_data['time results'].resample('3D').mean()
+    return result_data
+
+def get_gas_case_cost(system_cost, gas_cost):
+    """
+    Get the cost of the gas only case for each gas cost.
+    """
+    # Calculate the cost relative to 100% gas
+    # TODO grab these values from the input file rather than hardcoding
+    capital_cost = 28659.73903
+    efficiency = 0.95
+    VOM = 6
+    fuel_cost = (system_cost - capital_cost - VOM*8760) * efficiency
+    marginal_cost = VOM*8760 + (fuel_cost * (gas_cost / 10)) / efficiency
+
+    ref_cost = capital_cost + marginal_cost
+    return ref_cost
+
+def get_cost_contributions(filepath):
+    """
+    Get the cost contributions of the different technologies from the pickle file.
+    """
+
+    with open(filepath, 'rb') as f:
+        data = pickle.load(f)
+
+        component_data = data['component results']
+        # Add by carrier
+        component_data_carrier = component_data.groupby('carrier').sum()
+        cost = component_data_carrier['Capital Expenditure [$]'] + component_data_carrier['Operational Expenditure [$]']
+        # Divide by total met demand i.e. withdrawal of load
+        total_met_demand = component_data['Withdrawal [MW]']['Load'].sum()
+        # Drop load
+        cost = cost.drop(['load', 'heat link'])
+        # Group BTES_charger, BTES_discharger and granite into BTES
+        # cost = cost.groupby(lambda x: 'BTES' if ('BTES' in x or 'granite' in x) else x).sum()
+        
+    # Close the file
+    f.close()
+    return cost, total_met_demand
+

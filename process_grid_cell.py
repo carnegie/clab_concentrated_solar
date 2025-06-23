@@ -60,14 +60,13 @@ def process_grid_cell(lon, lat, file_name, gas_cost):
     base_costs = pd.read_csv(case_dict['costs_path'],index_col=[0, 1]).sort_index()
 
 
-    capacity_factors_csp = xr.open_dataset('concentrated_solar_capacity_factors/world_csp_CF_timeseries_2023.nc')
-    # capacity_factors_pv = xr.open_dataset('input_files/world_solar_CF_timeseries_2023_coarse.nc')
+    capacity_factors_cst = xr.open_dataset('concentrated_solar_capacity_factors/world_cst_CF_timeseries_2023.nc')
    
     # Create deep copies of network and component_list
     network_copy = copy.deepcopy(network)
     component_list_copy = copy.deepcopy(component_list)
 
-    network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "csp", capacity_factors_csp.sel(x=lon, y=lat))
+    network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "cst glasspoint", capacity_factors_cst.sel(x=lon, y=lat))
     # network_copy, component_list_copy = update_capacity_factors(network_copy, component_list_copy, "solar", capacity_factors_pv.sel(x=lon, y=lat))
 
     network_copy, component_list_copy = update_fuel_cost(
