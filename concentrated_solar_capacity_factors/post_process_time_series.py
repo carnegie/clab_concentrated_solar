@@ -8,6 +8,11 @@ parser.add_argument("--cf_type", "-c", type=str, help="Capacity factor type (win
 
 
 def coarsen_nearest_center(ds, x='x', y='y', factor_x=2, factor_y=2):
+    """
+    Coarsen the dataset by averaging over blocks of data, using the center of each block.
+    The value of the coarser grid cell is taken as the center value of the original finer grid cell.
+    """
+
     # Trim dimensions to be divisible by the coarsening factors
     nx = ds.sizes[x] - (ds.sizes[x] % factor_x)
     ny = ds.sizes[y] - (ds.sizes[y] % factor_y)

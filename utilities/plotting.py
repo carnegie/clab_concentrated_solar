@@ -8,7 +8,17 @@ import pickle
 from utilities.utils import get_world, mask_data_region, read_output_file, get_cost_contributions, get_gas_case_cost
 from matplotlib.colors import LogNorm
 import matplotlib.colors as mcolors
+from matplotlib.colors import LinearSegmentedColormap
 
+def truncate_colormap(cmap, minval=0.25, maxval=1.0, n=256):
+    """ 
+    Truncate a colormap to a specified range.
+    """
+    new_cmap = LinearSegmentedColormap.from_list(
+        f'trunc({cmap.name},{minval:.2f},{maxval:.2f})',
+        cmap(np.linspace(minval, maxval, n))
+    )
+    return new_cmap
 
 def overlay_gas_infrastructure(ax):
     """
@@ -34,14 +44,6 @@ def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=
 
     gas_cost = title.replace("Gas fuel cost = $", "").replace("/MWh", "")
     if 'Fraction' in cmap_label:
-        from matplotlib.colors import LinearSegmentedColormap
-        def truncate_colormap(cmap, minval=0.25, maxval=1.0, n=256):
-            new_cmap = LinearSegmentedColormap.from_list(
-                f'trunc({cmap.name},{minval:.2f},{maxval:.2f})',
-                cmap(np.linspace(minval, maxval, n))
-            )
-            return new_cmap
-
         # Truncated viridis (lighter blue-green start)
         trunc_viridis = truncate_colormap(plt.cm.viridis)
         cmap = trunc_viridis
@@ -50,11 +52,13 @@ def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=
         label = f'gas{gas_cost}_fraction'
         cbar_ticks = [0, 0.25, 0.5, 0.75, 1]
     else:
-        cmap = 'inferno'
+        trunc_inferno = truncate_colormap(plt.cm.inferno, minval=0.1, maxval=1.0)
+        cmap = trunc_inferno
         norm = LogNorm(vmin=10, vmax=500)
-        # norm = mcolors.Normalize(vmin=10, vmax=250)
+        # norm = mcolors.Normalize(vmin=0, vmax=500)
         label = file_path.split('_')[-1].split('.')[0]
-        cbar_ticks = [10, 100, 200]
+        # cbar_ticks = [0, 100, 200, 300, 400, 500]
+        cbar_ticks = [10, 100, 500]#200, 300, 400, 500]
 
     aspect_ratio = (dataset['x'].max() - dataset['x'].min()) / (dataset['y'].max() - dataset['y'].min())
 
@@ -108,8 +112,6 @@ def plot_line(lat_df, country, color, var='cs_fraction'):
                      lat_df_sub[f'median {var}']+lat_df_sub[f'upper error {var}'], alpha=0.2, color=color,
                      label=f'{country} error band')
                 
-    # x-axis log scale
-    # plt.xscale('log')
     plt.xlim(10,500)
 
 
@@ -131,7 +133,6 @@ def plot_line(lat_df, country, color, var='cs_fraction'):
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
     
-    # plt.legend()    
     if not os.path.exists('figures'):
         os.makedirs('figures')
     plt.savefig(f'figures/median_{var}_vs_gas_cost_{country}.pdf', bbox_inches='tight')
@@ -145,26 +146,9 @@ def plot_cost_emissions_change(res_df, country, color, var):
     # Get country data with index country and gas cost
     country_df_sub = res_df[res_df['country'] == country]
 
-    # Calculate the cost relative to 100% gas
-    # TODO grab these values from the input file rather than hardcoding
-    capital_cost = 28659.73903
-    efficiency = 0.95
-    VOM = 6
-    fuel_cost = (country_df_sub.loc[country_df_sub['gas cost'] == 10, f'median {var}'].values[0] - capital_cost - VOM*8760) * efficiency
-    marginal_cost = VOM*8760 + (fuel_cost * (country_df_sub['gas cost'] / 10)) / efficiency
-
-    ref_cost = capital_cost + marginal_cost
-    relative_cost = (country_df_sub[f'median {var}'] / ref_cost)
-    relative_cost_lower = (country_df_sub[f'lower error {var}'] / ref_cost)
-    relative_cost_upper = (country_df_sub[f'upper error {var}'] / ref_cost)
-
     relative_emissions = (1. - country_df_sub['median cs_fraction'])
 
     plt.figure(figsize=(6, 4))
-    # Plot relative cost vs gas cost
-    # plt.plot(country_df_sub['gas cost'], relative_cost, color=color, label='Median Cost with 10th&90th Percentile')
-    # plt.fill_between(country_df_sub['gas cost'], relative_cost - relative_cost_lower,
-    #                  relative_cost + relative_cost_upper, alpha=0.2, color=color)
     
     # Plot relative emissions vs gas cost
     plt.plot(country_df_sub['gas cost'], relative_emissions, color=color, linestyle='--', 
@@ -172,7 +156,6 @@ def plot_cost_emissions_change(res_df, country, color, var):
     plt.fill_between(country_df_sub['gas cost'], relative_emissions + country_df_sub['lower error cs_fraction'],
                      relative_emissions - country_df_sub['upper error cs_fraction'], alpha=0.2, color=color)
 
-    # plt.xscale('log')
     plt.xticks(fontsize=14)
     plt.xlim(10, 500)
     # Add % sign to y-axis labels
@@ -184,15 +167,13 @@ def plot_cost_emissions_change(res_df, country, color, var):
     plt.ylim(0, 1.01)
     plt.yticks(fontsize=14)
 
-    # plt.title(f'{country}')
-    # plt.legend()
     if not os.path.exists('figures'):
         os.makedirs('figures')
     plt.savefig(f'figures/change_emissions_{country.replace(" ","_")}.pdf', bbox_inches='tight')
 
 
 
-def plot_dispatch_curve(country, cell, gas_cost):
+def plot_dispatch_curve(country, cell, gas_cost, month='07'):
     """
     Plot the dispatch curve for a given grid cell.
     """
@@ -202,26 +183,32 @@ def plot_dispatch_curve(country, cell, gas_cost):
 
     # Extract the dispatch data
     dispatch_all = results_data['time results'].filter(like='dispatch').rename(columns=lambda x: x.replace(' dispatch', '').replace(' link', ''))
-    # Order should be gas boiler steam, cst glasspoint, heat storage link out
-    dispatch = dispatch_all[['gas boiler steam', 'cst glasspoint', 'heat storage out']]
+
+    # Only keep July of the dispatch_all data
+    dispatch_all = dispatch_all.loc[f'2023-{month}-14':f'2023-{month}-21']
+
+    dispatch = dispatch_all[['gas boiler steam', 'heat storage out', 'cst glasspoint']] 
     dispatch_out = dispatch_all[['heat storage in']]
 
     # Plot the dispatch data in a stacked plot
     plt.figure(figsize=(10, 6))
-    dispatch.plot.area(stacked=True, alpha=0.7, color=["#4b4844", "#dd9a34", "#da2b3a"], linewidth=0.5)
-    dispatch_out['heat storage in'] = -1 * dispatch_out['heat storage in']
-    dispatch_out['heat storage in'].plot.area(color="#da2b3a", alpha=0.4, linewidth=0.5)
+    dispatch.plot.area(stacked=True, color=["#4b4844", "#da2b3a", "#dd9a34"], linewidth=0)
+    dispatch_out_neg = -1 * dispatch_out['heat storage in']
+    dispatch_out_neg.plot.area(color="#da2b3a", alpha=0.7, linewidth=0)
     plt.title(f'Dispatch Curve for {country} - Cell ({cell}) - Gas Cost ${gas_cost}/MWh', fontsize=16)
-    plt.xlabel('Time (hours)', fontsize=14)
-    plt.ylabel('Dispatch (MW)', fontsize=14)
-    plt.ylim(-1, 2)
+    plt.xlabel('Date', fontsize=14)
+    ax = plt.gca()
+    # Set font size for both major and minor ticks
+    ax.tick_params(axis='both', which='both', labelsize=14)
+    plt.ylabel(f'Dispatch\nper mean demand (MW/MW)', fontsize=14)
+    plt.ylim(-2, 3)
     # Legend outside plot
-    plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=9)
     # Plot a line at y=1 to indicate the constant demand
     plt.axhline(y=1, color='black', linestyle='--', label='Constant Demand')
     if not os.path.exists('figures'):
         os.makedirs('figures')
-    plt.savefig(f'figures/dispatch_curve_cell_{cell}_{country}_gas_cost_{gas_cost}.pdf', bbox_inches='tight')
+    plt.savefig(f'figures/dispatch_curve_cell_{cell}_{country}_gas_cost_{gas_cost}_{month}.pdf', bbox_inches='tight')
 
 def plot_system_cost_share(country, cell, gas_costs):
     """
@@ -245,7 +232,6 @@ def plot_system_cost_share(country, cell, gas_costs):
 
         gas_case_cost = get_gas_case_cost(gas10_system_cost, gas_cost)
         gas_case_costs.append(gas_case_cost/tot_demand)
-        # print(f"Gas cost: {gas_cost}, Gas case cost: {gas_case_cost/tot_demand}, Normal cost: {cost_contr_norm.sum()}")
 
 
     fig, ax = plt.subplots(figsize=(6, 4))
@@ -255,13 +241,15 @@ def plot_system_cost_share(country, cell, gas_costs):
                     labels=stack_data.keys(),
                     colors=["#dd9a34", "#4b4844", "#da2b3a"],)
     ax.plot(gas_costs, gas_case_costs, color='black', linestyle='--', label='Gas Case Cost', linewidth=2)
-    ax.set_title(f'{country} - Cell ({cell})')
     ax.set_xlim(0, 500)
+    # fontsize for x and y ticks
+    ax.tick_params(axis='both', which='major', labelsize=14)
+
     ax.set_ylim(0, 500)
     ax.set_xlabel('Gas fuel cost ($/MWh)', fontsize=14)
     ax.set_ylabel(f'System Cost\n($/MWh met demand)', fontsize=14)
     # Legend outside plot
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    # ax.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
     
     # Save figure
     if not os.path.exists('figures'):

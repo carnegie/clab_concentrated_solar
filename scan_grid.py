@@ -12,7 +12,7 @@ def main():
     args = parser.parse_args()
     file_name = args.file_name
 
-    capacity_factors_csp = xr.open_dataset('concentrated_solar_capacity_factors/world_csp_CF_timeseries_2023.nc')
+    capacity_factors_csp = xr.open_dataset('concentrated_solar_capacity_factors/world_cst_CF_timeseries_2023.nc')
 
     # Print number of grid cells
     print(f"Number of grid cells: {capacity_factors_csp.x.size * capacity_factors_csp.y.size}")
@@ -25,10 +25,11 @@ def main():
     job_args = list(itertools.product(
         capacity_factors_csp.x.values,
         capacity_factors_csp.y.values,
-        [50] #[20, 30, 40, 60, 70, 80, 90, 200, 300]
-        # [10, 50, 100, 500, 1000, 10000]
-        # [25, 250, 750, 2500, 5000, 7500]
-        # [5000]
+        [1, 20, 40, 60, 80, 100,
+         120, 140, 160, 180, 200, 
+         220, 240, 260, 280, 300,
+         320, 340, 360, 380, 400,
+         420, 440, 460, 480, 500]  # Gas costs in $/MWh
         ))
 
     # Batch size: how many jobs per SLURM submission

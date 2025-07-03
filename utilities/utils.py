@@ -15,7 +15,7 @@ def get_world():
     # Load the world shapefile
     world = gpd.read_file('input_files/ne_110m_admin_0_countries.shp')
 
-    # Drop Antarctica by excluding everyhting below -60 latitude
+    # Drop Antarctica by excluding everything below -60 latitude
     world = world[world.geometry.centroid.y > -60]
 
     return world
@@ -182,7 +182,7 @@ def read_output_file(file_path):
     f.close()
 
     # Average over 5 days
-    result_data['time results'] = result_data['time results'].resample('3D').mean()
+    result_data['time results'] = result_data['time results']#.resample('12H').mean()
     return result_data
 
 def get_gas_case_cost(system_cost, gas_cost):
@@ -216,8 +216,6 @@ def get_cost_contributions(filepath):
         total_met_demand = component_data['Withdrawal [MW]']['Load'].sum()
         # Drop load
         cost = cost.drop(['load', 'heat link'])
-        # Group BTES_charger, BTES_discharger and granite into BTES
-        # cost = cost.groupby(lambda x: 'BTES' if ('BTES' in x or 'granite' in x) else x).sum()
         
     # Close the file
     f.close()
