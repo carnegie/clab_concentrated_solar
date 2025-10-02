@@ -12,3 +12,5 @@ gas boiler steam,lifetime,25.0,years,"Glasspoint", Steam boiler Gas:  Technical 
 molten-salt-store glasspoint,FOM,0.7,%/year,"Glasspoint","Ballpark number from Glasspoint costs",2024.0
 molten-salt-store glasspoint,investment,38000.,USD/MWh,"Glasspoint","Ballpark number from Glasspoint costs",2024.0
 molten-salt-store glasspoint,lifetime,25.0,years,"Glasspoint",Technical lifetime [years],2024.0
+molten-salt-store glasspoint,standing_loss,0.000418676,per unit,"Glasspoint","1% loss per day converted to per hour",2024.0
+molten-salt-store glasspoint,efficiency_store,1.0,per unit,"Glasspoint","No loss scenario",2024.0

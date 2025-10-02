@@ -63,7 +63,7 @@ def get_cs_fraction(result_data):
     Get the cs fraction from the result data
     """
         # Calculate concentrated solar supply as sum of what is dispatched by the generator and storage
-    cs_supply = result_data["component results"]["Supply [MW]"].loc[("Generator", "csp glasspoint")] + result_data["component results"]["Supply [MW]"].loc[('Store', 'molten-salt-store glasspoint')] - result_data["component results"]["Withdrawal [MW]"].loc[('Store', 'molten-salt-store glasspoint')]
+    cs_supply = result_data["component results"]["Supply [MW]"].loc[("Generator", "cst glasspoint")] + result_data["component results"]["Supply [MW]"].loc[('Store', 'molten-salt-store glasspoint')] - result_data["component results"]["Withdrawal [MW]"].loc[('Store', 'molten-salt-store glasspoint')]
     # Get concentrated solar dispatch fraction
     cs_fraction = cs_supply / result_data["component results"]["Withdrawal [MW]"].loc[('Load', 'load')]
 
@@ -75,22 +75,30 @@ def get_storage_ratio(result_data):
     Get the storage ratio from the result data
     """
     storage_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Store", "molten-salt-store glasspoint")]
-    generator_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Generator", "csp glasspoint")]
 
-    if not generator_capacity == 0:
-        storage_ratio = storage_capacity #/ generator_capacity
+    return storage_capacity
+
+def get_capacity(result_data, var):
+    """
+    Get the capacity of the given variable from the result data
+    """
+    if var == 'natgas':
+        capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Generator", "gas boiler steam")]
+    elif var == 'cst':
+        capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Generator", "cst glasspoint")]
     else:
-        storage_ratio = np.nan
-
-    return storage_ratio
-
+        raise ValueError(f"Variable {var} not supported")
+    
+    return capacity
 
 def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5):
     """
     Fill the results array with the results from the pickle files
     """
     pickle_path = f'output_data/{case.lower()}/{case.lower()}_gas{cond}_*.pickle'
+    print(f"Looking for pickle files at: {pickle_path}")
     for file in glob.glob(pickle_path):
+        print(file)
 
         with open(file, 'rb') as f:
             result_data = pickle.load(f)
@@ -119,8 +127,12 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
                 value = np.nan
         elif var == 'system_cost':
             value = result_data["component results"]["Capital Expenditure [$]"].sum() + result_data["component results"]["Operational Expenditure [$]"].sum()
+        elif 'capacity_' in var:
+            value = get_capacity(result_data, var.split('capacity_')[-1])
         else:
             raise ValueError(f"Variable {var} not supported")
+        
+        print(value)
 
         result_array.loc[{'x': result_array.x.sel(x=x, method="nearest"), 
                         'y': result_array.y.sel(y=y, method="nearest")}] = value
@@ -128,15 +140,19 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
     return result_array
 
 
-def store_results_map(case, cond, variable, result_array=None, csfrac_threshold=0.5):
+def store_results_map(out_path, case, cond, variable, result_array=None, csfrac_threshold=0.5):
     """
     Store the results of the breakeven cost analysis in a netcdf file.
     """
-    filename = f'output_data/{variable}_{case}_gas{cond}.nc' if variable != 'gas_price_min_frac' else f'output_data/{variable}_{case}_threshold{str(csfrac_threshold).replace(".", "p")}.nc'
+    filename = f'{out_path}/{variable}_{case}_gas{cond}.nc' if variable != 'gas_price_min_frac' else f'{out_path}/{variable}_{case}_threshold{str(csfrac_threshold).replace(".", "p")}.nc'
     if not os.path.exists(filename):
+
+        # Create directory if it doesn't exist
+        if not os.path.exists(out_path):
+            os.makedirs(out_path)
         
         if result_array is None:
-            cap_fac = xr.open_dataset('concentrated_solar_capacity_factors/world_csp_CF_timeseries_2023.nc')
+            cap_fac = xr.open_dataset('concentrated_solar_capacity_factors/world_cst_CF_timeseries_2023.nc')
             # Create xarray to store results
             result_array = xr.DataArray(
                 data=None,
@@ -151,7 +167,7 @@ def store_results_map(case, cond, variable, result_array=None, csfrac_threshold=
     return result_array
 
 
-def calculate_country_mean(df, dataset, var, countries, gas_cost):
+def calculate_country_median(df, dataset, var, countries, gas_cost):
     cs_frac_countries = [mask_data_region(dataset, get_country(country)) for country in countries]
 
     new_df = pd.DataFrame({
@@ -175,14 +191,12 @@ def calculate_country_mean(df, dataset, var, countries, gas_cost):
 
 def read_output_file(file_path):
     """
-    Read the pickle file and return the data, averaging over 5 days to smooth curves
+    Read the pickle file and return the data.
     """
     with open(file_path, 'rb') as f:
         result_data = pickle.load(f)
     f.close()
 
-    # Average over 5 days
-    result_data['time results'] = result_data['time results']#.resample('12H').mean()
     return result_data
 
 def get_gas_case_cost(system_cost, gas_cost):
@@ -195,7 +209,7 @@ def get_gas_case_cost(system_cost, gas_cost):
     efficiency = 0.95
     VOM = 6
     fuel_cost = (system_cost - capital_cost - VOM*8760) * efficiency
-    marginal_cost = VOM*8760 + (fuel_cost * (gas_cost / 10)) / efficiency
+    marginal_cost = VOM*8760 + (fuel_cost * (gas_cost)) / efficiency
 
     ref_cost = capital_cost + marginal_cost
     return ref_cost
@@ -215,9 +229,30 @@ def get_cost_contributions(filepath):
         # Divide by total met demand i.e. withdrawal of load
         total_met_demand = component_data['Withdrawal [MW]']['Load'].sum()
         # Drop load
-        cost = cost.drop(['load', 'heat link'])
+        cost = cost[['concentrated solar', 'gas boiler', 'molten salt storage']]
         
     # Close the file
     f.close()
     return cost, total_met_demand
 
+
+
+def calculate_co2_abatement_cost(country, results_df,  gas_cost_dict, total_system_cost_dict, gas_cost=50):
+    """
+    Calculate the CO2 abatement cost for a given country and gas cost.
+    """
+
+    # Get CST fractions
+    cst_fraction = results_df[(results_df['country'] == country) & (results_df['gas cost'] == gas_cost)]['median cs_fraction'].values[0]
+    ng_fraction = 1 - cst_fraction
+
+    ng_emissions = 0.181  # ton CO2/MWh for natural gas
+
+    # Calculate emissions
+    emissions = ng_fraction * ng_emissions  # ton CO2/MWh
+
+    # Calculate abatement cost
+
+    abatement_cost = (total_system_cost_dict[gas_cost] - gas_cost_dict[gas_cost]) / (0.181 - emissions)  # $/ton CO2
+
+    print(f"Country: {country}, Gas cost: {gas_cost}, CST fraction: {cst_fraction:.2f}, Emissions: {emissions:.3f} ton CO2/MWh, Abatement cost: ${abatement_cost:.2f}/ton CO2")

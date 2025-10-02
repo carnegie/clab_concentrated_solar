@@ -25,7 +25,7 @@ def main():
     job_args = list(itertools.product(
         capacity_factors_csp.x.values,
         capacity_factors_csp.y.values,
-        [1, 20, 40, 60, 80, 100,
+        [1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
          120, 140, 160, 180, 200, 
          220, 240, 260, 280, 300,
          320, 340, 360, 380, 400,

@@ -20,7 +20,8 @@ def update_capacity_factors(n, comp_list, cf_type, cfs_lat_lon):
         n.snapshots = cfs_lat_lon.index
         
         # Replace p_max_pu with the new capacity factors in network
-        n.generators_t['p_max_pu'][tech_component] = cfs_lat_lon
+        # derate by 5% to account for losses due to use of glasshouse
+        n.generators_t['p_max_pu'][tech_component] = cfs_lat_lon * 0.95 
 
         # Replace p_max_pu with the new capacity factors in component_list
         for comp in comp_list:
