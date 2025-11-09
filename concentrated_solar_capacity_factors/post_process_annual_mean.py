@@ -31,7 +31,7 @@ def process_annual_mean(cf_type):
     # Drop edge y-coordinate to make coarsening work
     mean_cf = mean_cf.isel(y=slice(0, -7))
     # Apply spatial downsampling
-    mean_cf = mean_cf.coarsen(x=10, y=10, boundary="trim").mean()
+    # mean_cf = mean_cf.coarsen(x=10, y=10, boundary="trim").mean()
 
     print("Saving mean capacity factor...")
     mean_cf.to_netcdf(

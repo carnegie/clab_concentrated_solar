@@ -52,8 +52,6 @@ def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=
         cbar_ticks = [0, 0.25, 0.5, 0.75, 1]
     else:
         trunc_inferno = truncate_colormap(plt.cm.inferno, minval=0.1, maxval=1.0)
-        # cmap = trunc_inferno
-        # norm = LogNorm(vmin=10, vmax=500)
         bounds = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500])
         log_bounds = np.log10(bounds)
         normalized_positions = (0.5 * (log_bounds[:-1] + log_bounds[1:]) - log_bounds[0]) / (log_bounds[-1] - log_bounds[0])
@@ -70,7 +68,7 @@ def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=
 
     p = masked_dataset['value'].plot(
     x='x', y='y', ax=ax, cmap=cmap, norm=norm,
-    cbar_kwargs={'label': cmap_label,  'shrink': 0.8, 'pad': 0.02, 'ticks': cbar_ticks, 'extend': "max"})
+    cbar_kwargs={'label': cmap_label,  'shrink': 0.8, 'pad': 0.02, 'ticks': cbar_ticks, 'extend': "neither" if "Fraction" in cmap_label else "max"})
 
     ax.set_aspect(aspect_ratio)
     ax.set_xticks([])
@@ -113,6 +111,8 @@ def plot_line(plotting_df, country, color, var='cs_fraction'):
             plotting_df_sub[f'median co2_emissions'] = 1 - plotting_df_sub['median cs_fraction']
             plotting_df_sub.loc[:, f'lower error {var}'] = -1 * plotting_df_sub[f'lower error cs_fraction']
             plotting_df_sub.loc[:, f'upper error {var}'] = -1 * plotting_df_sub[f'upper error cs_fraction']
+            plotting_df_sub[f'cell used co2_emissions'] = 1 - plotting_df_sub['cell used cs_fraction']
+
 
         plot_vars = [var]
 
@@ -121,9 +121,10 @@ def plot_line(plotting_df, country, color, var='cs_fraction'):
             plot_color = 'grey'
         else:
             plot_color = color
-        plt.plot(plotting_df_sub['gas cost'], plotting_df_sub[f'median {plot_var}'], color=plot_color)
         plt.plot(plotting_df_sub['gas cost'], plotting_df_sub[f'median {plot_var}'], color=plot_color, marker='o', 
-                 markersize=5, label=country)
+                 markersize=5, label=country, linestyle='-')
+        if not plot_var == 'capacity_natgas':
+            plt.plot(plotting_df_sub['gas cost'], plotting_df_sub[f'cell used {plot_var}'], color=plot_color, linestyle=':')        
         # Draw band instead of error bars
         plt.fill_between(plotting_df_sub['gas cost'], plotting_df_sub[f'median {plot_var}']-plotting_df_sub[f'lower error {plot_var}'],
                      plotting_df_sub[f'median {plot_var}']+plotting_df_sub[f'upper error {plot_var}'], alpha=0.2, color=plot_color,
@@ -219,18 +220,14 @@ def plot_dispatch_curve(outpath, country, cell, gas_cost, month='07'):
         columns=lambda x: x.replace(' dispatch', '').replace(' link', '')
     )
 
-    curtailed_cst = (
-        results_data['time inputs']['cst glasspoint series']
-        * results_data["component results"]["Optimal Capacity [MW]"].loc[("Generator", "cst glasspoint")]
-        - dispatch_all['cst glasspoint']
-    )
-    curtailed_cst[curtailed_cst < 0] = 0
-    dispatch_all['curtailed cst'] = curtailed_cst
+    # Add anything with discharge to dispatch_all
+    dispatch_all['heat storage out'] = results_data['time results'].loc[:, 'molten-salt-store glasspoint discharged']
+    dispatch_all['heat storage in'] = results_data['time results'].loc[:, 'molten-salt-store glasspoint charged']
 
     # Select window
     dispatch_all = dispatch_all.loc[f'2023-{month}-17':f'2023-{month}-24']
 
-    dispatch = dispatch_all[['gas boiler steam', 'heat storage out', 'cst glasspoint']]#, 'curtailed cst']]
+    dispatch = dispatch_all[['gas boiler steam', 'heat storage out', 'cst glasspoint']]
     dispatch_out_neg = -1 * dispatch_all['heat storage in']
 
     # Create figure with 2 panels stacked vertically
@@ -260,7 +257,7 @@ def plot_dispatch_curve(outpath, country, cell, gas_cost, month='07'):
         ax1.get_legend().remove()
 
     # --- Panel 2: storage SOC ---
-    storage_soc = results_data['time results']['molten-salt-store glasspoint e'].loc[f'2023-{month}-17':f'2023-{month}-24']
+    storage_soc = results_data['time results']['molten-salt-store glasspoint state of charge'].loc[f'2023-{month}-17':f'2023-{month}-24']
     storage_soc.plot(ax=ax2, color="#da2b3a", linewidth=2)
     ax2.set_ylabel('Storage SOC\n(h of mean demand)', fontsize=18)
     ax2.set_ylim(0, 15)

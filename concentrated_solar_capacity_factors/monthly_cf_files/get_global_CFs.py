@@ -10,7 +10,7 @@ def main(year, month):
     
     # Load the world shapefile
     world = gpd.read_file('../../input_files/ne_110m_admin_0_countries.shp')
-    # Drop Antarctica by excluding everyhting below -60 latitude
+    # Drop Antarctica by excluding everything below -60 latitude
     world = world[world.geometry.centroid.y > -60]
 
     region = world
@@ -34,7 +34,7 @@ def main(year, month):
     
     # Extract the concenctrated solar power generation capacity factors
     csp_power_generation = cutout.csp(
-        installation="SAM_parabolic_trough", 
+        installation="Glasspoint_parabolic_trough", 
         capacity_factor_timeseries=True,)
 
     # Save gridded data as netCDF files

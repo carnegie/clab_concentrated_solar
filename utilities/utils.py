@@ -63,7 +63,7 @@ def get_cs_fraction(result_data):
     Get the cs fraction from the result data
     """
         # Calculate concentrated solar supply as sum of what is dispatched by the generator and storage
-    cs_supply = result_data["component results"]["Supply [MW]"].loc[("Generator", "cst glasspoint")] + result_data["component results"]["Supply [MW]"].loc[('Store', 'molten-salt-store glasspoint')] - result_data["component results"]["Withdrawal [MW]"].loc[('Store', 'molten-salt-store glasspoint')]
+    cs_supply = result_data["component results"]["Supply [MW]"].loc[("Generator", "cst glasspoint")] + result_data["component results"]["Supply [MW]"].loc[('StorageUnit', 'molten-salt-store glasspoint')] - result_data["component results"]["Withdrawal [MW]"].loc[('StorageUnit', 'molten-salt-store glasspoint')]
     # Get concentrated solar dispatch fraction
     cs_fraction = cs_supply / result_data["component results"]["Withdrawal [MW]"].loc[('Load', 'load')]
 
@@ -74,7 +74,7 @@ def get_storage_ratio(result_data):
     """
     Get the storage ratio from the result data
     """
-    storage_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("Store", "molten-salt-store glasspoint")]
+    storage_capacity = result_data["component results"]["Optimal Capacity [MW]"].loc[("StorageUnit", "molten-salt-store glasspoint")]
 
     return storage_capacity
 
@@ -98,7 +98,6 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
     pickle_path = f'output_data/{case.lower()}/{case.lower()}_gas{cond}_*.pickle'
     print(f"Looking for pickle files at: {pickle_path}")
     for file in glob.glob(pickle_path):
-        print(file)
 
         with open(file, 'rb') as f:
             result_data = pickle.load(f)
@@ -132,10 +131,18 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
         else:
             raise ValueError(f"Variable {var} not supported")
         
-        print(value)
+        if x == 48.75 and y == 28.25:
+            print("coordinates: x:", x, "y:", y, "value:", value)
 
         result_array.loc[{'x': result_array.x.sel(x=x, method="nearest"), 
                         'y': result_array.y.sel(y=y, method="nearest")}] = value
+        result_array = result_array.astype(float)
+
+        
+        if x == 48.75 and y == 28.25:
+            print(result_array.sel(x=x, y=y, method="nearest"))
+            print("dtype:", result_array.dtype)
+            print(type(result_array.values.flat[0]))
             
     return result_array
 
@@ -167,7 +174,18 @@ def store_results_map(out_path, case, cond, variable, result_array=None, csfrac_
     return result_array
 
 
-def calculate_country_median(df, dataset, var, countries, gas_cost):
+def get_cell_value(country_dataset, cell):
+    """
+    Get the cell value from the cell tuple.
+    """
+    # Extract numeric x, y from cell string
+    x = cell.split(',')[0]
+    y = cell.split(',')[1]
+ 
+    return country_dataset.sel(x=float(x.replace('°', '')), y=float(y.replace('°', '')), method="nearest").to_array().values.item()
+
+
+def calculate_country_median(df, dataset, var, countries, country_cell_dict, gas_cost):
     cs_frac_countries = [mask_data_region(dataset, get_country(country)) for country in countries]
 
     new_df = pd.DataFrame({
@@ -179,7 +197,8 @@ def calculate_country_median(df, dataset, var, countries, gas_cost):
         ],
         f'upper error {var}': [
             np.nanpercentile(cs['value'], 90) - np.nanmedian(cs['value'].values) for cs in cs_frac_countries
-        ]
+        ],
+        f'cell used {var}': [get_cell_value(dataset, country_cell_dict[country][0]) for country in countries]
     })
 
     if df.empty:
@@ -252,7 +271,7 @@ def calculate_co2_abatement_cost(country, results_df,  gas_cost_dict, total_syst
     emissions = ng_fraction * ng_emissions  # ton CO2/MWh
 
     # Calculate abatement cost
-
+    # System costs are in $/MWh met demand
     abatement_cost = (total_system_cost_dict[gas_cost] - gas_cost_dict[gas_cost]) / (0.181 - emissions)  # $/ton CO2
 
     print(f"Country: {country}, Gas cost: {gas_cost}, CST fraction: {cst_fraction:.2f}, Emissions: {emissions:.3f} ton CO2/MWh, Abatement cost: ${abatement_cost:.2f}/ton CO2")

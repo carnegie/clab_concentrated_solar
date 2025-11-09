@@ -1,8 +1,9 @@
 import os
 from utilities.utils import store_results_map
+import argparse
 
 
-def main():
+def main(var):
     """
     Store the fraction of CST storage and breakeven costs in a netcdf file
     """
@@ -19,30 +20,34 @@ def main():
     # get thresholds from frac_results keys and replace 'p' with '.'
     cs_thresholds = [float(key.replace('p', '.')) for key in frac_results.keys()]
 
-    for var in ['cs_fraction', 'storage_ratio', 'system_cost', 'capacity_natgas', 'capacity_cst', 'gas_price_min_frac']:
-        print(var)
-        results = None
-        for gas_cost in gas_costs:
-            print(gas_cost)
-            if not var == 'gas_price_min_frac':
-                results = store_results_map(out_path, case, gas_cost, var)
+    print(var)
+    results = None
+    for gas_cost in gas_costs:
+        print(gas_cost)
+        if not var == 'gas_price_min_frac':
+            results = store_results_map(out_path, case, gas_cost, var)
 
-                # Save the results to a netcdf file
-                if not os.path.exists(f'{out_path}/{var}_{case}_gas{gas_cost}.nc'):
-                    results.to_netcdf(f'{out_path}/{var}_{case}_gas{gas_cost}.nc')
+            # Save the results to a netcdf file
+            if not os.path.exists(f'{out_path}/{var}_{case}_gas{gas_cost}.nc'):
+                results.to_netcdf(f'{out_path}/{var}_{case}_gas{gas_cost}.nc')
 
-            else:
-                for cs_thresh in cs_thresholds:
-                    print(cs_thresh)
-                    frac_results[str(cs_thresh).replace(".", "p")] = store_results_map(out_path, case, gas_cost, var, result_array=frac_results[str(cs_thresh).replace(".", "p")], csfrac_threshold=cs_thresh)
-                    print("results dict", frac_results)
-                    
-        if var == 'gas_price_min_frac':
-            for cs_threshold in cs_thresholds:
-                # Save the results to a netcdf file
-                output_file = f'{out_path}/{var}_{case}_threshold{str(cs_threshold).replace(".", "p")}.nc'
-                if not os.path.exists(output_file):
-                    frac_results[str(cs_threshold).replace(".", "p")].to_netcdf(output_file)
+        else:
+            for cs_thresh in cs_thresholds:
+                print(cs_thresh)
+                frac_results[str(cs_thresh).replace(".", "p")] = store_results_map(out_path, case, gas_cost, var, result_array=frac_results[str(cs_thresh).replace(".", "p")], csfrac_threshold=cs_thresh)
+                print("results dict", frac_results)
+                
+    if var == 'gas_price_min_frac':
+        for cs_threshold in cs_thresholds:
+            # Save the results to a netcdf file
+            output_file = f'{out_path}/{var}_{case}_threshold{str(cs_threshold).replace(".", "p")}.nc'
+            if not os.path.exists(output_file):
+                frac_results[str(cs_threshold).replace(".", "p")].to_netcdf(output_file)
 
 if __name__ == "__main__":
-    main()
+
+    parser = argparse.ArgumentParser(description="Store results based on variable")
+    parser.add_argument("-v", "--var", type=str, required=True, help="Variable to process")
+    args = parser.parse_args()
+
+    main(args.var)
