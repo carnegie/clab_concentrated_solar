@@ -117,14 +117,15 @@ def plot_line(plotting_df, country, color, var='cs_fraction'):
         plot_vars = [var]
 
     for plot_var in plot_vars:
-        if plot_var == 'capacity_natgas':
+        if plot_var == 'capacity_natgas' and len(plot_vars) > 1:
             plot_color = 'grey'
+
         else:
             plot_color = color
         plt.plot(plotting_df_sub['gas cost'], plotting_df_sub[f'median {plot_var}'], color=plot_color, marker='o', 
                  markersize=5, label=country, linestyle='-')
-        if not plot_var == 'capacity_natgas':
-            plt.plot(plotting_df_sub['gas cost'], plotting_df_sub[f'cell used {plot_var}'], color=plot_color, linestyle=':')        
+        # if not plot_var == 'capacity_natgas':
+        plt.plot(plotting_df_sub['gas cost'], plotting_df_sub[f'cell used {plot_var}'], color=plot_color, linestyle=':')        
         # Draw band instead of error bars
         plt.fill_between(plotting_df_sub['gas cost'], plotting_df_sub[f'median {plot_var}']-plotting_df_sub[f'lower error {plot_var}'],
                      plotting_df_sub[f'median {plot_var}']+plotting_df_sub[f'upper error {plot_var}'], alpha=0.2, color=plot_color,
@@ -155,9 +156,20 @@ def plot_line(plotting_df, country, color, var='cs_fraction'):
         plt.ylim(0, 1.01)
 
     elif var == 'capacities':
-        plt.ylabel('Nameplate capacity (MW)', fontsize=14)
+        plt.ylabel('Nameplate capacity (MW/MW)', fontsize=14)
         # y-axis range
         plt.ylim(0, 20)
+    
+    elif var == 'capacity_natgas':
+        plt.ylim(0, 1.02)
+        plt.ylabel('Nameplate capacity (MW/MW)', fontsize=14)
+
+    elif var == 'natgas_fuel_use':
+        plt.ylim(0, 1.02)
+        # Show y-labels as %, so times 100 and add % sign
+        ax = plt.gca()
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda y, pos: f'{int(y*100)}%'))
+        plt.ylabel('Natural gas fuel use (fraction of total supply)', fontsize=14)
 
     else:
         print(f"Variable {var} not recognized. Please use 'cs_fraction', 'storage_ratio', or 'co2_emissions'.")

@@ -112,7 +112,8 @@ def fill_results_from_pickle(result_array, case, cond, var, csfrac_threshold=0.5
         # Get the value of the variable
         if var == 'cs_fraction':
             value = get_cs_fraction(result_data)
-            print(value)
+        elif var == 'natgas_fuel_use':
+            value = result_data["component results"]["Supply [MW]"].loc[("Generator", "gas boiler steam")] / result_data["component results"]["Supply [MW]"].sum()
         elif var == 'storage_ratio':
             value = get_storage_ratio(result_data)
         elif var == 'gas_price_min_frac':
