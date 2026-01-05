@@ -50,20 +50,22 @@ Costs of the different technologies assumed in this analysis can be found in
 
 ### Run the optimization
 
-Run the optimation with
+As the optimization is run on a global grid and for 31 gas fuel cost values, we recommend running the optimizations on an HPC cluster. Open the script ```scan_grid.py``` to update the paths and then submit the jobs that run the optimizations with the following command:
 
 ```python scan_grid.py -f input_files/CST_storage_case.xlsx```
 
 which reads the global gridded capacity factors from the file ```concentrated_solar_capacity_factors/world_cst_CF_timeseries_2023.nc``` and runs PyPSA on each grid cell and for each gas fuel cost value to find the least-cost solution to supply the constant heat demand.
 
-Store the results in maps in .nc file to prepare for the plotting step with
+Store the results in maps in .nc files to prepare for the plotting step with
 ```python store_results.py -v <variable>```
 
 replacing ```<variable>``` with the different plotting variables ```cs_fraction storage_ratio system_cost capacity_natgas capacity_cst natgas_fuel_use gas_price_min_frac```.
 
+This can also be done on an HPC cluster, with the bash script
+```run_store_results_job.sh```, make sure to open that script and update the paths.
+
 The resulting maps are stored in ```output_data/cst_storage/maps/```.
 
-
 Create the plots for the publication with the interactive jupyter script
-```plot_result_map.ipynb```, storing the resulting plots in ```figures/```.
+```plot_result_map.ipynb```, which stores the resulting plots in ```figures/```.
 
