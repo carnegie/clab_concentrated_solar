@@ -57,6 +57,7 @@ As the optimization is run on a global grid and for 31 gas fuel cost values, we 
 which reads the global gridded capacity factors from the file ```concentrated_solar_capacity_factors/world_cst_CF_timeseries_2023.nc``` and runs PyPSA on each grid cell and for each gas fuel cost value to find the least-cost solution to supply the constant heat demand.
 
 Store the results in maps in .nc files to prepare for the plotting step with
+
 ```python store_results.py -v <variable>```
 
 replacing ```<variable>``` with the different plotting variables ```cs_fraction storage_ratio system_cost capacity_natgas capacity_cst natgas_fuel_use gas_price_min_frac```.

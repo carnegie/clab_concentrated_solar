@@ -1,6 +1,6 @@
 # Concentrated solar thermal generation capacity factors
 
-Install the Atlite version in this repository with
+Install the Atlite version in this directory which deviates from the default Atite version to calculate the concentrated solar thermal capacity factors due to an error in the default version (pull request underway) with
 
 ```
 cd atlite
@@ -19,7 +19,7 @@ Postprocess the monthly files to merge them into one annual time series file and
 
 The resulting .nc file will be used in the optimization as input (see clab_concentrated_solar/README.md).
 
-Calculate the annual mean with 
+Calculate the annual mean (shown in SI Fig. 1 in the publication) with 
 
 ```python post_process_annual_mean.py```
 
