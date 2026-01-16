@@ -53,11 +53,12 @@ def plot_result_map(file_path, case_name, title, cmap_label, gas_infrastructure=
     else:
         trunc_inferno = truncate_colormap(plt.cm.inferno, minval=0.1, maxval=1.0)
         bounds = np.array([10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500])
-        log_bounds = np.log10(bounds)
-        normalized_positions = (0.5 * (log_bounds[:-1] + log_bounds[1:]) - log_bounds[0]) / (log_bounds[-1] - log_bounds[0])
-        colors = trunc_inferno(np.linspace(normalized_positions[0], normalized_positions[-1], len(bounds)))
+        n_bins = len(bounds) - 1
+        log_centers = (np.log10(bounds[:-1]) + np.log10(bounds[1:])) / 2
+        normalized = (log_centers - log_centers[0]) / (log_centers[-1] - log_centers[0])
+        colors = trunc_inferno(normalized)
         cmap = ListedColormap(colors)
-        norm = BoundaryNorm(boundaries=bounds, ncolors=len(colors), extend='max')
+        norm = BoundaryNorm(bounds, ncolors=n_bins+1, extend='max')
 
         label = file_path.split('_')[-1].split('.')[0]
         cbar_ticks = [10, 50, 100, 500]
@@ -174,9 +175,9 @@ def plot_line(plotting_df, country, color, var='cs_fraction'):
     else:
         print(f"Variable {var} not recognized. Please use 'cs_fraction', 'storage_ratio', or 'co2_emissions'.")
 
-    if (var == 'capacities' or var == 'co2_emissions') and country == 'Saudi Arabia':
-        # Plot vertical dashed black line at gas cost = 45 and gas cost = 350
-        plt.axvline(x=45, color='black', linestyle='--', linewidth=0.8)
+    if (var == 'capacities' or var == 'co2_emissions'):
+        # Plot vertical dashed black line at gas cost = 48 and gas cost = 350
+        plt.axvline(x=48, color='black', linestyle='--', linewidth=0.8)
         plt.axvline(x=350, color='black', linestyle='--', linewidth=0.8)
     
     # Make all labels larger
@@ -265,6 +266,9 @@ def plot_dispatch_curve(outpath, country, cell, gas_cost, month='07'):
     ax1.set_ylim(-3, 4)
     ax1.axhline(y=1, color='black', linestyle='--')
     ax1.axhline(y=0, color='black', linestyle='-')
+    # Vertical grey line at each day boundary
+    for day in range(18, 25):
+        ax1.axvline(x=f'2023-{month}-{day} 00:00:00', color='grey', linestyle='-', linewidth=0.8)
     if ax1.get_legend():
         ax1.get_legend().remove()
 
@@ -274,6 +278,9 @@ def plot_dispatch_curve(outpath, country, cell, gas_cost, month='07'):
     ax2.set_ylabel('Storage SOC\n(h of mean demand)', fontsize=18)
     ax2.set_ylim(0, 15)
     ax2.tick_params(axis='both', which='both', labelsize=24)
+    # Vertical grey line at each day boundary
+    for day in range(18, 25):
+        ax2.axvline(x=f'2023-{month}-{day} 00:00:00', color='grey', linestyle='-', linewidth=0.8)
 
     # X-axis label only on bottom panel
     ax2.set_xlabel('Date', fontsize=14)

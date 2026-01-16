@@ -57,11 +57,15 @@ def main():
             '--job-name', job_name,
             '--output', out_log,
             '--time', '24:00:00',
+            '--cpus-per-task', '8',
             '--error', err_log,
             '--wrap',
-            f'cd /groups/carnegie_poc/awongel/clab_concentrated_solar && '
-            'source /home/awongel/miniconda3/etc/profile.d/conda.sh && '
-            'export GRB_LICENSE_FILE=/central/software/gurobi/gurobi1000/linux64/license_files/gurobi.lic && '
+            # UPDATE REPOSITORY PATH HERE
+            f'cd REPOSITORY_PATH && '
+            # UPDATE PATH TO CONDA HERE
+            'source conda.sh && '
+            # UPDATE PATH TO GUROBI LICENSE HERE
+            'export GRB_LICENSE_FILE=gurobi.lic && '
             'conda activate table_pypsa_env && '
             + inner_script
         ]
